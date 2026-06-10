@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGE Prepa 50 · Sistema Integral de Gestión Escolar — UAGro</title>
+<meta name="description" content="Sistema escolar para docentes de la Preparatoria No. 50 de la UAGro: asistencia con QR, materias, horarios, calificaciones por rubros y consultas para alumnos y padres.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css?v=3">
+<!-- Librerías QR (generación y lectura con cámara) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+<!-- Reportes en PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<!-- Importación desde Excel -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<!-- Gráficas estadísticas -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<!-- Nube: Firebase (autenticación y base de datos en tiempo real) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ───────── BARRA LATERAL ───────── -->
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">P50</div>
+      <div class="brand-text">
+        <strong>SIGE Prepa 50</strong>
+        <span>UAGro · Tlacoachistlahuaca, Gro.</span>
+      </div>
+    </div>
+
+    <nav class="nav">
+      <span class="nav-label">Labor diaria</span>
+      <button class="nav-item active" data-view="dashboard">🏠 Panel del día</button>
+      <button class="nav-item" data-view="asistencia">📋 Pase de lista</button>
+      <button class="nav-item" data-view="calificaciones">🧮 Calificaciones</button>
+
+      <span class="nav-label">Administración</span>
+      <button class="nav-item" data-view="docentes">👩‍🏫 Docentes</button>
+      <button class="nav-item" data-view="materias">📚 Materias y rubros</button>
+      <button class="nav-item" data-view="grupos">🎓 Grupos y alumnos</button>
+      <button class="nav-item" data-view="horarios">🗓️ Horarios</button>
+      <button class="nav-item" data-view="credenciales">🪪 Credenciales QR</button>
+
+      <span class="nav-label">Comunidad</span>
+      <button class="nav-item" data-view="consultas">🔎 Portal alumnos y padres</button>
+      <button class="nav-item" data-view="estadisticas">📊 Estadísticas</button>
+      <button class="nav-item" data-view="reportes">📈 Reportes</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button class="btn btn-ghost btn-sm" id="btnRespaldo">⬇ Respaldo</button>
+      <button class="btn btn-ghost btn-sm" id="btnRestaurar">⬆ Restaurar</button>
+      <input type="file" id="fileRestaurar" accept=".json" hidden>
+    </div>
+  </aside>
+
+  <!-- ───────── CONTENIDO ───────── -->
+  <main class="main">
+    <header class="topbar">
+      <button class="hamburger" id="hamburger" aria-label="Abrir menú">☰</button>
+      <div>
+        <h1 id="viewTitle">Panel del día</h1>
+        <p id="viewSubtitle" class="muted">Preparatoria No. 50 — UAGro · Tlacoachistlahuaca, Gro.</p>
+      </div>
+      <div class="topbar-derecha">
+        <button class="btn btn-sm btn-outline" id="btnTactil" title="Botones y textos más grandes para pantallas táctiles">👆 Táctil</button>
+        <div class="sesion" id="sesionInfo"></div>
+        <div class="topbar-date" id="topbarDate"></div>
+      </div>
+    </header>
+
+    <section class="content" id="content"><!-- Las vistas se renderizan aquí --></section>
+  </main>
+</div>
+
+<!-- ───────── MODAL GENÉRICO ───────── -->
+<div class="modal-backdrop" id="modalBackdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true">
+    <div class="modal-head">
+      <h2 id="modalTitle"></h2>
+      <button class="modal-close" id="modalClose" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+  </div>
+</div>
+
+<!-- ───────── INICIO DE SESIÓN (solo en modo nube) ───────── -->
+<div class="login" id="loginOverlay" hidden>
+  <div class="login-card">
+    <div class="brand-mark" style="margin:0 auto .6rem">P50</div>
+    <h2>SIGE Prepa 50</h2>
+    <p class="muted">Preparatoria No. 50 · UAGro<br>Tlacoachistlahuaca, Gro.</p>
+    <div class="field" style="text-align:left;margin-top:1rem"><label>Correo del docente</label>
+      <input id="logMail" type="email" autocomplete="username" placeholder="docente@uagro.mx"></div>
+    <div class="field" style="text-align:left;margin-top:.6rem"><label>Contraseña</label>
+      <input id="logPass" type="password" autocomplete="current-password"></div>
+    <p id="logError" class="login-error" hidden></p>
+    <button class="btn btn-gold" id="logEntrar" style="width:100%;margin-top:1rem">Iniciar sesión</button>
+    <div class="login-sep">— o —</div>
+    <button class="btn btn-outline" id="logPortal" style="width:100%">🔎 Consultar como padre o alumno</button>
+    <p class="muted" style="margin-top:.9rem;font-size:.74rem">Las cuentas de docente las crea la dirección del plantel.</p>
+  </div>
+</div>
+
+<div class="toast" id="toast" hidden></div>
+
+<script src="js/config.js?v=3"></script>
+<script src="js/nube.js?v=3"></script>
+<script src="js/app.js?v=3"></script>
+</body>
+</html>
