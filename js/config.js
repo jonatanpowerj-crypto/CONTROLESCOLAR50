@@ -1,22 +1,15 @@
 /* ════════════════════════════════════════════════════════════════
    CONFIGURACIÓN DE LA NUBE (Firebase) — SIGE Prepa 50
-   ════════════════════════════════════════════════════════════════
-   👉 Sigue la guía INSTALACION.md para crear tu proyecto Firebase
-      gratuito y obtener estos valores (tarda ~15 minutos).
-
-   👉 Pega aquí la configuración de TU proyecto y vuelve a subir
-      este archivo a GitHub. Con eso el sistema pasa automáticamente
-      a MODO NUBE: inicio de sesión para docentes, datos compartidos
-      entre todos los dispositivos y portal de padres desde casa.
-
-   👉 Si dejas los valores "PEGA_AQUI...", el sistema funciona en
-      MODO LOCAL (datos solo en este navegador), igual que antes.
+   Proyecto: prepa50 · Preparatoria No. 50 UAGro
+   Tlacoachistlahuaca, Gro.
+   Este archivo ya contiene las llaves del proyecto: al subirlo a
+   GitHub, el sistema entra automáticamente en MODO NUBE.
    ════════════════════════════════════════════════════════════════ */
 const FIREBASE_CONFIG = {
-  apiKey:            "PEGA_AQUI_TU_API_KEY",
-  authDomain:        "PEGA_AQUI.firebaseapp.com",
-  projectId:         "PEGA_AQUI_TU_PROJECT_ID",
-  storageBucket:     "PEGA_AQUI.appspot.com",
-  messagingSenderId: "PEGA_AQUI",
-  appId:             "PEGA_AQUI"
+  apiKey:            "AIzaSyAN2CdfLyeV54Zo3U-V6QwGaIa2ahrZjwY",
+  authDomain:        "prepa50.firebaseapp.com",
+  projectId:         "prepa50",
+  storageBucket:     "prepa50.firebasestorage.app",
+  messagingSenderId: "1099041651667",
+  appId:             "1:1099041651667:web:336fd0b828f4167f25cd26"
 };
