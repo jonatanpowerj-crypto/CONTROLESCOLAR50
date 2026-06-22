@@ -94,6 +94,24 @@ const alumnosDeGrupo = gid => DB.alumnos.filter(a=>a.grupoId===gid)
   .sort((a,b)=>(a.apellidos+a.nombre).localeCompare(b.apellidos+b.nombre));
 const nombreCompleto = a => `${a.apellidos} ${a.nombre}`;
 
+/* ── Filtrado por rol: lo que el usuario en sesión puede ver ── */
+function misMaterias(){
+  if(typeof esAdmin!=='function' || esAdmin()) return DB.materias;
+  const ids = materiasPermitidas();
+  return DB.materias.filter(m=>ids.includes(m.id));
+}
+function misGrupos(){
+  if(typeof esAdmin!=='function' || esAdmin()) return DB.grupos;
+  const ids = gruposPermitidos();
+  return DB.grupos.filter(g=>ids.includes(g.id));
+}
+/* Aviso reutilizable cuando el docente no tiene materias asignadas */
+function avisoSinAsignacion(){
+  return `<div class="vacio card"><span class="icono">📭</span>
+    Aún no tienes materias asignadas en el sistema.<br>
+    <span class="muted">Pide al administrador que te registre como docente de tus materias en el módulo «Docentes / Materias». En cuanto lo haga, aparecerán aquí automáticamente.</span></div>`;
+}
+
 /* ───────────────────────── 2. UTILERÍAS DE INTERFAZ ───────────────────────── */
 const $ = s => document.querySelector(s);
 const esc = t => String(t ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -161,10 +179,32 @@ $('#btnTactil').addEventListener('click', ()=>{
 function render(){
   detenerLector();
   limpiarCharts();
+  aplicarPermisosMenu();
+  // Si un docente cae en una vista exclusiva del admin, redirigir al panel
+  const soloAdmin = ['docentes'];
+  if(!esAdmin() && soloAdmin.includes(vistaActual)){
+    vistaActual = 'dashboard';
+    document.querySelectorAll('.nav-item').forEach(x=>x.classList.remove('active'));
+    document.querySelector('.nav-item[data-view="dashboard"]')?.classList.add('active');
+  }
   const [t,s] = TITULOS[vistaActual];
   $('#viewTitle').textContent = t;
   $('#viewSubtitle').textContent = s;
   VISTAS[vistaActual]($('#content'));
+}
+
+/* Oculta del menú lateral los módulos exclusivos del administrador */
+function aplicarPermisosMenu(){
+  const soloAdmin = ['docentes'];
+  document.querySelectorAll('.nav-item').forEach(b=>{
+    b.style.display = (!esAdmin() && soloAdmin.includes(b.dataset.view)) ? 'none' : '';
+  });
+  // Oculta las etiquetas de sección que queden sin botones visibles
+  document.querySelectorAll('.nav-label').forEach(lbl=>{
+    let vis = false, n = lbl.nextElementSibling;
+    while(n && n.classList.contains('nav-item')){ if(n.style.display!=='none'){ vis=true; break; } n=n.nextElementSibling; }
+    lbl.style.display = vis ? '' : 'none';
+  });
 }
 
 $('#topbarDate').textContent = new Date().toLocaleDateString('es-MX',
@@ -175,14 +215,17 @@ function vistaDashboard(el){
   const hoy = hoyISO();
   const diaSemana = new Date().toLocaleDateString('es-MX',{weekday:'long'});
   const diaCap = diaSemana.charAt(0).toUpperCase()+diaSemana.slice(1);
-  const clasesHoy = DB.horarios.filter(h=>h.dia===diaCap).sort((a,b)=>a.hi.localeCompare(b.hi));
-  const asisHoy = DB.asistencias.filter(a=>a.fecha===hoy);
+  const midsVis = misMaterias().map(m=>m.id);
+  const gidsVis = misGrupos().map(g=>g.id);
+  const clasesHoy = DB.horarios.filter(h=>h.dia===diaCap && (esAdmin()||midsVis.includes(h.materiaId))).sort((a,b)=>a.hi.localeCompare(b.hi));
+  const alumnosVis = esAdmin() ? DB.alumnos : DB.alumnos.filter(a=>gidsVis.includes(a.grupoId));
+  const asisHoy = DB.asistencias.filter(a=>a.fecha===hoy && (esAdmin()||midsVis.includes(a.materiaId)));
   const presentes = asisHoy.filter(a=>a.estado==='P'||a.estado==='R').length;
   const faltas = asisHoy.filter(a=>a.estado==='F').length;
 
   el.innerHTML = `
   <div class="grid grid-4">
-    <div class="card stat"><span class="num">${DB.alumnos.length}</span><span class="lbl">Alumnos inscritos</span></div>
+    <div class="card stat"><span class="num">${alumnosVis.length}</span><span class="lbl">${esAdmin()?'Alumnos inscritos':'Alumnos en mis grupos'}</span></div>
     <div class="card stat"><span class="num">${clasesHoy.length}</span><span class="lbl">Clases hoy (${esc(diaCap)})</span></div>
     <div class="card stat gold"><span class="num">${presentes}</span><span class="lbl">Asistencias hoy</span></div>
     <div class="card stat"><span class="num" style="color:var(--mal)">${faltas}</span><span class="lbl">Faltas hoy</span></div>
@@ -209,10 +252,11 @@ function vistaDashboard(el){
   <div class="card" style="margin-top:1rem">
     <h3>📌 Accesos rápidos</h3>
     <div style="display:flex;gap:.6rem;flex-wrap:wrap">
-      <button class="btn btn-gold" data-go="credenciales">Imprimir credenciales QR</button>
+      ${esAdmin()?'<button class="btn btn-gold" data-go="credenciales">Imprimir credenciales QR</button>':''}
       <button class="btn btn-outline" data-go="calificaciones">Capturar calificaciones</button>
-      <button class="btn btn-outline" data-go="consultas">Abrir portal de padres</button>
-      <button class="btn btn-outline" data-go="reportes">Exportar reportes</button>
+      <button class="btn btn-outline" data-go="asistencia">Pase de lista</button>
+      ${esAdmin()?'<button class="btn btn-outline" data-go="reportes">Exportar reportes</button>':''}
+      <button class="btn btn-outline" data-go="estadisticas">Ver estadísticas</button>
     </div>
   </div>`;
 
@@ -230,7 +274,9 @@ function porcentajeAsistencia(alumnoId, materiaId=null){
   return Math.round(ok/regs.length*100);
 }
 function tablaRiesgo(){
-  const filas = DB.alumnos.map(a=>({a, p:porcentajeAsistencia(a.id)}))
+  const gidsVis = misGrupos().map(g=>g.id);
+  const universo = esAdmin() ? DB.alumnos : DB.alumnos.filter(a=>gidsVis.includes(a.grupoId));
+  const filas = universo.map(a=>({a, p:porcentajeAsistencia(a.id)}))
     .filter(x=>x.p!==null && x.p<80).sort((x,y)=>x.p-y.p).slice(0,6);
   if(!filas.length) return `<div class="vacio"><span class="icono">✅</span>Sin alumnos en riesgo por inasistencia.</div>`;
   return `<div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Grupo</th><th>Asistencia</th></tr></thead><tbody>
@@ -249,17 +295,19 @@ function detenerLector(){
 }
 
 function vistaAsistencia(el){
-  if(!sesionPase.materiaId) sesionPase.materiaId = DB.materias[0]?.id || null;
-  if(!sesionPase.grupoId)   sesionPase.grupoId   = DB.grupos[0]?.id || null;
+  const matsVis = misMaterias(), grusVis = misGrupos();
+  if(!matsVis.length){ el.innerHTML = avisoSinAsignacion(); return; }
+  if(!sesionPase.materiaId || !matsVis.some(m=>m.id===sesionPase.materiaId)) sesionPase.materiaId = matsVis[0]?.id || null;
+  if(!sesionPase.grupoId || !grusVis.some(g=>g.id===sesionPase.grupoId))   sesionPase.grupoId   = grusVis[0]?.id || null;
 
   el.innerHTML = `
   <div class="card no-print">
     <div class="pase-head">
       <div class="field"><label>Fecha</label><input type="date" id="paseFecha" value="${sesionPase.fecha}"></div>
       <div class="field"><label>Materia</label>
-        <select id="paseMateria">${opciones(DB.materias, m=>`${m.clave} · ${m.nombre}`, sesionPase.materiaId)}</select></div>
+        <select id="paseMateria">${opciones(matsVis, m=>`${m.clave} · ${m.nombre}`, sesionPase.materiaId)}</select></div>
       <div class="field"><label>Grupo</label>
-        <select id="paseGrupo">${opciones(DB.grupos, g=>`${g.nombre} (${g.turno})`, sesionPase.grupoId)}</select></div>
+        <select id="paseGrupo">${opciones(grusVis, g=>`${g.nombre} (${g.turno})`, sesionPase.grupoId)}</select></div>
       <div class="field"><label>Modo de registro</label>
         <div class="modo-switch">
           <button id="modoManual" class="${sesionPase.modo==='manual'?'on':''}">✍️ Tradicional</button>
@@ -382,16 +430,18 @@ function procesarQR(texto){
 let sesionCal = { materiaId:null, grupoId:null, parcial:1 };
 
 function vistaCalificaciones(el){
-  if(!sesionCal.materiaId) sesionCal.materiaId = DB.materias[0]?.id;
-  if(!sesionCal.grupoId)   sesionCal.grupoId   = DB.grupos[0]?.id;
+  const matsVis = misMaterias(), grusVis = misGrupos();
+  if(!matsVis.length){ el.innerHTML = avisoSinAsignacion(); return; }
+  if(!sesionCal.materiaId || !matsVis.some(m=>m.id===sesionCal.materiaId)) sesionCal.materiaId = matsVis[0]?.id;
+  if(!sesionCal.grupoId || !grusVis.some(g=>g.id===sesionCal.grupoId))   sesionCal.grupoId   = grusVis[0]?.id;
 
   el.innerHTML = `
   <div class="card">
     <div class="toolbar">
       <div class="field"><label>Materia</label>
-        <select id="calMateria">${opciones(DB.materias, m=>`${m.clave} · ${m.nombre}`, sesionCal.materiaId)}</select></div>
+        <select id="calMateria">${opciones(matsVis, m=>`${m.clave} · ${m.nombre}`, sesionCal.materiaId)}</select></div>
       <div class="field"><label>Grupo</label>
-        <select id="calGrupo">${opciones(DB.grupos, g=>g.nombre, sesionCal.grupoId)}</select></div>
+        <select id="calGrupo">${opciones(grusVis, g=>g.nombre, sesionCal.grupoId)}</select></div>
       <div class="field"><label>Parcial</label>
         <select id="calParcial">${[1,2,3].map(p=>`<option value="${p}" ${p===sesionCal.parcial?'selected':''}>Parcial ${p}</option>`).join('')}</select></div>
       <div class="spacer"></div>
@@ -518,8 +568,9 @@ function formDocente(id){
       <div class="field full"><label>Nombre completo *</label><input id="fNombre" value="${esc(d.nombre)}"></div>
       <div class="field"><label>Especialidad</label><input id="fEsp" value="${esc(d.especialidad)}"></div>
       <div class="field"><label>Teléfono</label><input id="fTel" value="${esc(d.telefono)}"></div>
-      <div class="field full"><label>Correo institucional</label><input id="fMail" type="email" value="${esc(d.email)}"></div>
+      <div class="field full"><label>Correo institucional <span class="muted">(será su acceso al sistema)</span></label><input id="fMail" type="email" value="${esc(d.email)}" placeholder="docente@uagro.mx"></div>
     </div>
+    <p class="muted" style="font-size:.78rem">💡 Este correo debe coincidir con la cuenta que se le cree en Firebase para que el docente vea solo sus materias asignadas.</p>
     <div class="modal-foot"><button class="btn btn-outline" id="fCancel">Cancelar</button>
     <button class="btn btn-primary" id="fOk">Guardar docente</button></div>`,
   body=>{
@@ -550,7 +601,7 @@ function vistaMaterias(el){
 
   const pintar = ()=>{
     const q = ($('#busMat').value||'').toLowerCase();
-    const lista = DB.materias.filter(m=>(m.nombre+m.clave).toLowerCase().includes(q));
+    const lista = misMaterias().filter(m=>(m.nombre+m.clave).toLowerCase().includes(q));
     $('#listaMat').innerHTML = lista.length ? lista.map(m=>`
       <div class="card">
         <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:start">
@@ -566,7 +617,9 @@ function vistaMaterias(el){
           ${m.rubros.reduce((s,r)=>s+(+r.peso||0),0)!==100?'<span class="tag tag-aviso">Pesos ≠ 100 %</span>':''}
         </div>
       </div>`).join('')
-    : '<div class="vacio card"><span class="icono">📚</span>Sin materias registradas.</div>';
+    : (typeof esAdmin==='function' && !esAdmin()
+        ? avisoSinAsignacion()
+        : '<div class="vacio card"><span class="icono">📚</span>Sin materias registradas.</div>');
 
     $('#listaMat').querySelectorAll('[data-ed]').forEach(b=>b.addEventListener('click',()=>formMateria(b.dataset.ed)));
     $('#listaMat').querySelectorAll('[data-el]').forEach(b=>b.addEventListener('click',()=>{
@@ -598,8 +651,10 @@ function formMateria(id){
       <div class="field"><label>Semestre</label>
         <select id="fSem">${[1,2,3,4,5,6].map(s=>`<option ${s===m.semestre?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field full"><label>Nombre de la materia *</label><input id="fNom" value="${esc(m.nombre)}"></div>
-      <div class="field full"><label>Docente responsable</label>
-        <select id="fDoc"><option value="">Sin asignar</option>${opciones(DB.docentes, d=>d.nombre, m.docenteId)}</select></div>
+      ${(typeof esAdmin==='function' && !esAdmin())
+        ? `<input type="hidden" id="fDoc" value="${esc(m.docenteId || (typeof PERFIL!=='undefined'?PERFIL.docenteId:'') || '')}">`
+        : `<div class="field full"><label>Docente responsable</label>
+        <select id="fDoc"><option value="">Sin asignar</option>${opciones(DB.docentes, d=>d.nombre, m.docenteId)}</select></div>`}
     </div>
     <h3 style="margin:1rem 0 .4rem">Rubros de evaluación <span class="muted" id="sumaRubros"></span></h3>
     <div class="table-wrap"><table><thead><tr><th>Rubro</th><th>Peso %</th><th></th></tr></thead>
@@ -627,9 +682,15 @@ function formMateria(id){
       const clave = body.querySelector('#fClave').value.trim();
       const nombre = body.querySelector('#fNom').value.trim();
       if(!clave || !nombre){ toast('Clave y nombre son obligatorios.'); return; }
+      const esDocente = (typeof esAdmin==='function' && !esAdmin());
+      const docId = body.querySelector('#fDoc').value || null;
+      if(esDocente && !docId){
+        toast('Tu cuenta aún no está vinculada como docente. Pide al administrador que registre tu correo en el módulo Docentes.');
+        return;
+      }
       rubros = rubros.filter(r=>r.nombre.trim());
       const datos = {clave, nombre, semestre:+body.querySelector('#fSem').value,
-        docenteId: body.querySelector('#fDoc').value || null, rubros};
+        docenteId: docId, rubros};
       let obj;
       if(id){ obj = materia(id); Object.assign(obj, datos); }
       else { obj = {id:uid(), ...datos}; DB.materias.push(obj); }
@@ -642,20 +703,25 @@ function formMateria(id){
 /* ───────────────────────── 9. GRUPOS Y ALUMNOS ───────────────────────── */
 let grupoSel = null;
 function vistaGrupos(el){
-  if(!grupoSel || !grupo(grupoSel)) grupoSel = DB.grupos[0]?.id || null;
+  const grusVis = misGrupos();
+  const admin = (typeof esAdmin==='function') ? esAdmin() : true;
+  if(!admin && !grusVis.length){ el.innerHTML = avisoSinAsignacion(); return; }
+  if(!grupoSel || !grusVis.some(g=>g.id===grupoSel)) grupoSel = grusVis[0]?.id || null;
   el.innerHTML = `
+  ${!admin?'<p class="muted" style="margin-bottom:.8rem">Ves los grupos donde impartes clase. La inscripción y baja de alumnos la gestiona la administración del plantel; tú llevas su asistencia y calificaciones.</p>':''}
   <div class="toolbar">
     <div class="field"><label>Grupo</label>
-      <select id="selGrupo">${opciones(DB.grupos, g=>`${g.nombre} · ${g.turno} (sem. ${g.semestre})`, grupoSel)}</select></div>
-    <button class="btn btn-outline" id="nuevoGrupo">＋ Grupo</button>
+      <select id="selGrupo">${opciones(grusVis, g=>`${g.nombre} · ${g.turno} (sem. ${g.semestre})`, grupoSel)}</select></div>
+    ${admin?`<button class="btn btn-outline" id="nuevoGrupo">＋ Grupo</button>
     <button class="btn btn-danger btn-sm" id="bajaGrupo">Eliminar grupo</button>
     <div class="spacer"></div>
     <button class="btn btn-gold" id="impExcel">⬆ Importar desde Excel</button>
-    <button class="btn btn-primary" id="nuevoAl">＋ Inscribir alumno</button>
+    <button class="btn btn-primary" id="nuevoAl">＋ Inscribir alumno</button>`:'<div class="spacer"></div>'}
   </div>
   <div id="listaAl"></div>`;
 
   $('#selGrupo').addEventListener('change', e=>{ grupoSel=e.target.value; pintar(); });
+  if(admin){
   $('#nuevoGrupo').addEventListener('click', ()=>{
     abrirModal('Nuevo grupo', `
       <div class="form-grid">
@@ -693,21 +759,23 @@ function vistaGrupos(el){
   });
   $('#nuevoAl').addEventListener('click', ()=>formAlumno(null));
   $('#impExcel').addEventListener('click', modalImportarExcel);
+  } // fin if(admin)
 
   const pintar = ()=>{
     const lista = alumnosDeGrupo(grupoSel);
     $('#listaAl').innerHTML = lista.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Matrícula</th><th>Alumno</th><th>Padre / tutor</th><th>Tel. tutor</th><th>Asistencia global</th><th></th></tr></thead><tbody>
+      <thead><tr><th>Matrícula</th><th>Alumno</th><th>Padre / tutor</th><th>Tel. tutor</th><th>Asistencia global</th>${admin?'<th></th>':''}</tr></thead><tbody>
       ${lista.map(a=>{
         const p = porcentajeAsistencia(a.id);
         return `<tr><td class="mono">${esc(a.matricula)}</td><td><strong>${esc(nombreCompleto(a))}</strong></td>
         <td>${esc(a.tutor||'—')}</td><td class="mono">${esc(a.telTutor||'—')}</td>
         <td>${p===null?'<span class="muted">Sin registros</span>':`<span class="tag ${p>=80?'tag-ok':'tag-mal'}">${p} %</span>`}</td>
-        <td><button class="btn btn-sm btn-outline" data-ed="${a.id}">Editar</button>
-            <button class="btn btn-sm btn-danger" data-el="${a.id}">Baja</button></td></tr>`;}).join('')}
+        ${admin?`<td><button class="btn btn-sm btn-outline" data-ed="${a.id}">Editar</button>
+            <button class="btn btn-sm btn-danger" data-el="${a.id}">Baja</button></td>`:''}</tr>`;}).join('')}
       </tbody></table></div>`
     : '<div class="vacio card"><span class="icono">🎓</span>Este grupo aún no tiene alumnos inscritos.</div>';
 
+    if(admin){
     $('#listaAl').querySelectorAll('[data-ed]').forEach(b=>b.addEventListener('click',()=>formAlumno(b.dataset.ed)));
     $('#listaAl').querySelectorAll('[data-el]').forEach(b=>b.addEventListener('click',()=>{
       if(!confirm('¿Dar de baja al alumno? Se conservará su historial.')) return;
@@ -715,6 +783,7 @@ function vistaGrupos(el){
       persistDel('alumnos', b.dataset.el);
       pintar(); toast('Alumno dado de baja.');
     }));
+    }
   };
   pintar();
 }
@@ -757,11 +826,13 @@ function formAlumno(id){
 /* ───────────────────────── 10. HORARIOS ───────────────────────── */
 let horGrupo = null;
 function vistaHorarios(el){
-  if(!horGrupo || !grupo(horGrupo)) horGrupo = DB.grupos[0]?.id || null;
+  const grusVis = misGrupos(), matsVis = misMaterias();
+  if(typeof esAdmin==='function' && !esAdmin() && !matsVis.length){ el.innerHTML = avisoSinAsignacion(); return; }
+  if(!horGrupo || !grusVis.some(g=>g.id===horGrupo)) horGrupo = grusVis[0]?.id || null;
   el.innerHTML = `
   <div class="toolbar">
     <div class="field"><label>Grupo</label>
-      <select id="horSel">${opciones(DB.grupos, g=>`${g.nombre} · ${g.turno}`, horGrupo)}</select></div>
+      <select id="horSel">${opciones(grusVis, g=>`${g.nombre} · ${g.turno}`, horGrupo)}</select></div>
     <div class="spacer"></div>
     <button class="btn btn-primary" id="nuevoHor">＋ Agregar clase</button>
   </div>
@@ -772,7 +843,7 @@ function vistaHorarios(el){
     abrirModal('Agregar clase al horario', `
       <div class="form-grid">
         <div class="field full"><label>Materia</label>
-          <select id="hMat">${opciones(DB.materias, m=>`${m.clave} · ${m.nombre}`)}</select></div>
+          <select id="hMat">${opciones(misMaterias(), m=>`${m.clave} · ${m.nombre}`)}</select></div>
         <div class="field"><label>Día</label>
           <select id="hDia">${DIAS.map(d=>`<option>${d}</option>`).join('')}</select></div>
         <div class="field"><label>Aula</label><input id="hAula" placeholder="Aula 4"></div>
@@ -826,11 +897,13 @@ function vistaHorarios(el){
 
 /* ───────────────────────── 11. CREDENCIALES QR ───────────────────────── */
 function vistaCredenciales(el){
-  const gid = grupoSel && grupo(grupoSel) ? grupoSel : DB.grupos[0]?.id;
+  const grusVis = misGrupos();
+  if(!grusVis.length){ el.innerHTML = avisoSinAsignacion(); return; }
+  const gid = grupoSel && grusVis.some(g=>g.id===grupoSel) ? grupoSel : grusVis[0]?.id;
   el.innerHTML = `
   <div class="toolbar no-print">
     <div class="field"><label>Grupo</label>
-      <select id="credGrupo">${opciones(DB.grupos, g=>g.nombre, gid)}</select></div>
+      <select id="credGrupo">${opciones(grusVis, g=>g.nombre, gid)}</select></div>
     <div class="spacer"></div>
     <button class="btn btn-gold" id="imprimirCred">🖨️ Imprimir credenciales</button>
   </div>
@@ -943,8 +1016,8 @@ function vistaReportes(el){
       <h3>📋 Reporte de asistencia (CSV)</h3>
       <p class="muted">Exporta el detalle de asistencias por grupo y materia en un rango de fechas, listo para Excel.</p>
       <div class="form-grid" style="margin-top:.7rem">
-        <div class="field"><label>Grupo</label><select id="repGrupo">${opciones(DB.grupos, g=>g.nombre)}</select></div>
-        <div class="field"><label>Materia</label><select id="repMateria"><option value="">Todas</option>${opciones(DB.materias, m=>m.nombre)}</select></div>
+        <div class="field"><label>Grupo</label><select id="repGrupo">${opciones(misGrupos(), g=>g.nombre)}</select></div>
+        <div class="field"><label>Materia</label><select id="repMateria"><option value="">Todas</option>${opciones(misMaterias(), m=>m.nombre)}</select></div>
         <div class="field"><label>Desde</label><input type="date" id="repDesde" value="${hoyISO().slice(0,8)}01"></div>
         <div class="field"><label>Hasta</label><input type="date" id="repHasta" value="${hoyISO()}"></div>
       </div>
@@ -957,8 +1030,8 @@ function vistaReportes(el){
       <h3>🧮 Concentrado de calificaciones (CSV)</h3>
       <p class="muted">Promedios ponderados por alumno, materia y parcial, con el desglose por rubro.</p>
       <div class="form-grid" style="margin-top:.7rem">
-        <div class="field"><label>Grupo</label><select id="repCalGrupo">${opciones(DB.grupos, g=>g.nombre)}</select></div>
-        <div class="field"><label>Materia</label><select id="repCalMateria">${opciones(DB.materias, m=>m.nombre)}</select></div>
+        <div class="field"><label>Grupo</label><select id="repCalGrupo">${opciones(misGrupos(), g=>g.nombre)}</select></div>
+        <div class="field"><label>Materia</label><select id="repCalMateria">${opciones(misMaterias(), m=>m.nombre)}</select></div>
       </div>
       <button class="btn btn-primary" id="expCal" style="margin-top:.8rem">⬇ Descargar CSV de calificaciones</button>
     </div>
@@ -966,21 +1039,24 @@ function vistaReportes(el){
       <h3>🧾 Boletas de calificaciones en PDF</h3>
       <p class="muted">Boleta institucional por alumno o de todo el grupo: promedios por parcial, promedio final y % de asistencia por materia.</p>
       <div class="form-grid" style="margin-top:.7rem">
-        <div class="field"><label>Grupo</label><select id="bolGrupo">${opciones(DB.grupos, g=>g.nombre)}</select></div>
+        <div class="field"><label>Grupo</label><select id="bolGrupo">${opciones(misGrupos(), g=>g.nombre)}</select></div>
         <div class="field"><label>Alumno</label><select id="bolAlumno"></select></div>
       </div>
       <button class="btn btn-gold" id="expBoleta" style="margin-top:.8rem">🧾 Generar boleta(s) en PDF</button>
     </div>
   </div>
-  <div class="card" style="margin-top:1rem">
+  ${(typeof esAdmin!=='function' || esAdmin()) ? `<div class="card" style="margin-top:1rem">
     <h3>🧰 Datos del sistema</h3>
     <p class="muted">Genera un respaldo completo (JSON) desde la barra lateral, reinicia con datos de demostración, o vacía todo para iniciar de cero con datos reales.</p>
     <div style="display:flex;gap:.6rem;flex-wrap:wrap;margin-top:.6rem">
       <button class="btn btn-outline" id="reiniciar">Cargar datos de demostración</button>
       <button class="btn btn-danger" id="vaciarTodo">🧹 Vaciar todo el sistema (iniciar de cero)</button>
     </div>
-  </div>`;
+  </div>`:''}`;
 
+  if(typeof esAdmin==='function' && !esAdmin()){
+    // Docente: sin herramientas destructivas
+  } else {
   $('#vaciarTodo').addEventListener('click', ()=>{
     const conf = prompt('⚠️ Esta acción ELIMINA PERMANENTEMENTE todos los datos del sistema' +
       (MODO==='nube' ? ' EN LA NUBE (todos los dispositivos quedarán vacíos)' : '') +
@@ -1066,6 +1142,7 @@ function vistaReportes(el){
     if(MODO==='nube') subirTodoANube(); else guardarLocal();
     render(); toast('Datos de demostración cargados.');
   });
+  } // fin bloque admin (datos del sistema)
 }
 
 /* ───────────────────────── 14. RESPALDO / RESTAURACIÓN ───────────────────────── */
@@ -1372,12 +1449,14 @@ function vistaEstadisticas(el){
     el.innerHTML = '<div class="vacio card"><span class="icono">📊</span>La librería de gráficas no cargó. Revisa tu conexión a internet y recarga la página.</div>';
     return;
   }
+  const matsVis = misMaterias(), grusVis = misGrupos();
+  if(!matsVis.length){ el.innerHTML = avisoSinAsignacion(); return; }
   const mesInicio = hoyISO().slice(0,8)+'01';
   el.innerHTML = `
   <div class="card no-print">
     <div class="toolbar" style="margin-bottom:0">
-      <div class="field"><label>Grupo</label><select id="estGrupo">${opciones(DB.grupos, g=>g.nombre)}</select></div>
-      <div class="field"><label>Materia</label><select id="estMateria"><option value="">Todas las del grupo</option>${opciones(DB.materias, m=>m.nombre)}</select></div>
+      <div class="field"><label>Grupo</label><select id="estGrupo">${opciones(grusVis, g=>g.nombre)}</select></div>
+      <div class="field"><label>Materia</label><select id="estMateria"><option value="">Todas las del grupo</option>${opciones(matsVis, m=>m.nombre)}</select></div>
       <div class="field"><label>Parcial</label><select id="estParcial">${[1,2,3].map(p=>`<option value="${p}">Parcial ${p}</option>`).join('')}</select></div>
       <div class="field"><label>Asistencia desde</label><input type="date" id="estDesde" value="${mesInicio}"></div>
       <div class="field"><label>Hasta</label><input type="date" id="estHasta" value="${hoyISO()}"></div>
@@ -1399,7 +1478,9 @@ function vistaEstadisticas(el){
     const d = $('#estDesde').value, h = $('#estHasta').value;
     const alumnos = alumnosDeGrupo(g);
     const materiasGrupo = mid ? [materia(mid)].filter(Boolean)
-      : [...new Set(DB.horarios.filter(x=>x.grupoId===g).map(x=>x.materiaId))].map(id=>materia(id)).filter(Boolean);
+      : [...new Set(DB.horarios.filter(x=>x.grupoId===g).map(x=>x.materiaId))]
+          .map(id=>materia(id)).filter(Boolean)
+          .filter(m=>esAdmin() || materiasPermitidas().includes(m.id));
 
     /* — Asistencia filtrada — */
     const regs = DB.asistencias.filter(a=>a.grupoId===g && (!mid||a.materiaId===mid) && a.fecha>=d && a.fecha<=h);
