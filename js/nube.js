@@ -13,11 +13,26 @@ let fsdb = null, authFB = null, usuarioActual = null, modoConsulta = false;
 let PERFIL = { rol:'admin', docenteId:null, email:null };
 const ADMIN_EMAILS = ['jonatan33@uagro.mx'];  // correos con rol de administrador
 const PASS_TEMPORAL = 'Prepa50.2026';          // contraseña genérica de primer ingreso
-const COLECCIONES = ['docentes','materias','grupos','alumnos','horarios','asistencias','calificaciones'];
+const COLECCIONES = ['docentes','materias','grupos','alumnos','horarios','asistencias','calificaciones','bitacora','calendario'];
 let suscrito = false, renderTimer = null;
 
 /* ¿El usuario en sesión es administrador? */
 function esAdmin(){ return MODO!=='nube' || PERFIL.rol==='admin'; }
+
+/* Identidad corta del usuario en sesión para registrar autoría.
+   Devuelve el correo (o 'local' en modo sin nube). */
+function autorActual(){
+  if(MODO!=='nube') return 'local';
+  return (usuarioActual && usuarioActual.email) || 'desconocido';
+}
+/* Sella un objeto con autoría: quién y cuándo lo creó/modificó. */
+function sellarAutoria(obj, esNuevo){
+  const ahora = new Date().toISOString();
+  if(esNuevo && !obj.creadoPor){ obj.creadoPor = autorActual(); obj.creadoEn = ahora; }
+  obj.editadoPor = autorActual();
+  obj.editadoEn = ahora;
+  return obj;
+}
 
 /* IDs de las materias que el docente en sesión puede gestionar.
    Admin = todas. Docente = solo las suyas (por docenteId en cada materia). */

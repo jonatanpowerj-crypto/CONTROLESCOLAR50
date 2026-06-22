@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SIGE Prepa 50 · Sistema Integral de Gestión Escolar — UAGro</title>
 <meta name="description" content="Sistema escolar para docentes de la Preparatoria No. 50 de la UAGro: asistencia con QR, materias, horarios, calificaciones por rubros y consultas para alumnos y padres.">
+<!-- PWA: instalación como app -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#0B2342">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SIGE P50">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:wght@500;600;700;800&family=Public+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="css/styles.css?v=5">
@@ -42,12 +49,14 @@
       <button class="nav-item active" data-view="dashboard">🏠 Panel del día</button>
       <button class="nav-item" data-view="asistencia">📋 Pase de lista</button>
       <button class="nav-item" data-view="calificaciones">🧮 Calificaciones</button>
+      <button class="nav-item" data-view="bitacora">📓 Bitácora y planeación</button>
 
       <span class="nav-label">Administración</span>
       <button class="nav-item" data-view="docentes">👩‍🏫 Docentes</button>
       <button class="nav-item" data-view="materias">📚 Materias y rubros</button>
       <button class="nav-item" data-view="grupos">🎓 Grupos y alumnos</button>
       <button class="nav-item" data-view="horarios">🗓️ Horarios</button>
+      <button class="nav-item" data-view="calendario">📅 Calendario escolar</button>
       <button class="nav-item" data-view="credenciales">🪪 Credenciales QR</button>
 
       <span class="nav-label">Comunidad</span>
@@ -72,6 +81,7 @@
         <p id="viewSubtitle" class="muted">Preparatoria No. 50 — UAGro · Tlacoachistlahuaca, Gro.</p>
       </div>
       <div class="topbar-derecha">
+        <button class="btn btn-sm btn-gold" id="btnInstalar" hidden title="Instalar como aplicación">⬇ Instalar app</button>
         <button class="btn btn-sm btn-outline" id="btnTactil" title="Botones y textos más grandes para pantallas táctiles">👆 Táctil</button>
         <div class="sesion" id="sesionInfo"></div>
         <div class="topbar-date" id="topbarDate"></div>
@@ -113,8 +123,16 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="js/config.js?v=5"></script>
-<script src="js/nube.js?v=5"></script>
-<script src="js/app.js?v=5"></script>
+<script src="js/config.js?v=8"></script>
+<script src="js/nube.js?v=8"></script>
+<script src="js/app.js?v=8"></script>
+<script>
+/* Registro del Service Worker para modo app / sin conexión */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+</script>
 </body>
 </html>

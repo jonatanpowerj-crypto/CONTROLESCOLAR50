@@ -73,13 +73,16 @@ function semilla(){
     ],
     asistencias:[],      // {id, fecha, materiaId, grupoId, alumnoId, estado:'P|R|J|F', metodo:'qr|manual', hora}
     calificaciones:[],   // {id, alumnoId, materiaId, parcial:1|2|3, rubro, valor}
+    bitacora:[],         // {id, fecha, materiaId, grupoId, campo, tema, actividades, tarea, observaciones}
+    calendario:[],       // {id, fecha, fechaFin, titulo, tipo, nota}
   };
 }
 
 function estructuraVacia(){
   return { plantel:{nombre:'Preparatoria No. 50', universidad:'Universidad Autónoma de Guerrero',
       ciudad:'Tlacoachistlahuaca, Gro.', ciclo:'2026-A', toleranciaMin:10},
-    docentes:[], materias:[], grupos:[], alumnos:[], horarios:[], asistencias:[], calificaciones:[] };
+    docentes:[], materias:[], grupos:[], alumnos:[], horarios:[], asistencias:[], calificaciones:[],
+    bitacora:[], calendario:[] };
 }
 let DB = estructuraVacia();
 /* En modo nube la persistencia la hace nube.js; en modo local, este navegador. */
@@ -146,10 +149,12 @@ const TITULOS = {
   dashboard:['Panel del día','Tu jornada de un vistazo'],
   asistencia:['Pase de lista','Escáner QR o registro tradicional'],
   calificaciones:['Calificaciones','Captura por rubros ponderados'],
+  bitacora:['Bitácora y planeación','Registro de clase alineado a la NEM'],
   docentes:['Docentes','Plantilla académica del plantel'],
   materias:['Materias y rubros','Unidades de aprendizaje y criterios de evaluación'],
   grupos:['Grupos y alumnos','Matrícula por grupo'],
   horarios:['Horarios','Carga horaria semanal'],
+  calendario:['Calendario escolar','Parciales, periodos y eventos del ciclo'],
   credenciales:['Credenciales QR','Gafetes imprimibles con código de asistencia'],
   consultas:['Portal alumnos y padres','Consulta de avance por matrícula'],
   estadisticas:['Estadísticas','Aprobación, asistencia y desempeño por rubros'],
@@ -175,6 +180,23 @@ $('#btnTactil').addEventListener('click', ()=>{
   localStorage.setItem('p50_tactil', activo ? '1' : '0');
   toast(activo ? 'Modo táctil activado: botones y textos más grandes.' : 'Modo táctil desactivado.');
 });
+
+/* ── Instalación de la app (PWA) ── */
+let promptInstalar = null;
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault();
+  promptInstalar = e;
+  const b = $('#btnInstalar'); if(b) b.hidden = false;
+});
+$('#btnInstalar')?.addEventListener('click', async ()=>{
+  if(!promptInstalar) return;
+  promptInstalar.prompt();
+  const res = await promptInstalar.userChoice;
+  promptInstalar = null;
+  $('#btnInstalar').hidden = true;
+  if(res.outcome==='accepted') toast('¡App instalada! Búscala en tu pantalla de inicio.');
+});
+window.addEventListener('appinstalled', ()=>{ const b=$('#btnInstalar'); if(b) b.hidden=true; });
 
 function render(){
   detenerLector();
@@ -211,6 +233,21 @@ $('#topbarDate').textContent = new Date().toLocaleDateString('es-MX',
   {weekday:'long', year:'numeric', month:'long', day:'numeric'});
 
 /* ───────────────────────── 4. PANEL DEL DÍA ───────────────────────── */
+function bandaProximoEvento(){
+  const hoy = hoyISO();
+  const prox = [...DB.calendario].filter(e=>(e.fechaFin||e.fecha)>=hoy)
+    .sort((a,b)=>a.fecha.localeCompare(b.fecha))[0];
+  if(!prox) return '';
+  const dias = Math.round((new Date(prox.fecha+'T12:00') - new Date(hoy+'T12:00'))/86400000);
+  const cuando = dias<=0 ? 'En curso' : dias===1 ? 'Mañana' : `En ${dias} días`;
+  const t = TIPOS_EVENTO[prox.tipo]||TIPOS_EVENTO.evento;
+  return `<div class="card" style="margin-bottom:1rem;border-left:5px solid ${t.color};display:flex;align-items:center;gap:.8rem;flex-wrap:wrap">
+    <span style="font-size:1.4rem">📅</span>
+    <div style="flex:1"><strong>${esc(prox.titulo)}</strong> <span class="tag tag-info">${esc(t.label)}</span><br>
+      <span class="muted">${esc(new Date(prox.fecha+'T12:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'}))}</span></div>
+    <span class="tag ${dias<=3?'tag-aviso':'tag-info'}">${cuando}</span>
+  </div>`;
+}
 function vistaDashboard(el){
   const hoy = hoyISO();
   const diaSemana = new Date().toLocaleDateString('es-MX',{weekday:'long'});
@@ -224,6 +261,7 @@ function vistaDashboard(el){
   const faltas = asisHoy.filter(a=>a.estado==='F').length;
 
   el.innerHTML = `
+  ${bandaProximoEvento()}
   <div class="grid grid-4">
     <div class="card stat"><span class="num">${alumnosVis.length}</span><span class="lbl">${esAdmin()?'Alumnos inscritos':'Alumnos en mis grupos'}</span></div>
     <div class="card stat"><span class="num">${clasesHoy.length}</span><span class="lbl">Clases hoy (${esc(diaCap)})</span></div>
@@ -262,6 +300,7 @@ function vistaDashboard(el){
 
   $('#irPase')?.addEventListener('click', ()=>navegarA('asistencia'));
   el.querySelectorAll('[data-go]').forEach(b=>b.addEventListener('click',()=>navegarA(b.dataset.go)));
+  el.querySelectorAll('[data-wa]').forEach(b=>b.addEventListener('click',()=>avisarTutor(b.dataset.wa)));
 }
 function navegarA(v){
   document.querySelector(`.nav-item[data-view="${v}"]`)?.click();
@@ -279,9 +318,38 @@ function tablaRiesgo(){
   const filas = universo.map(a=>({a, p:porcentajeAsistencia(a.id)}))
     .filter(x=>x.p!==null && x.p<80).sort((x,y)=>x.p-y.p).slice(0,6);
   if(!filas.length) return `<div class="vacio"><span class="icono">✅</span>Sin alumnos en riesgo por inasistencia.</div>`;
-  return `<div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Grupo</th><th>Asistencia</th></tr></thead><tbody>
+  return `<div class="table-wrap"><table><thead><tr><th>Alumno</th><th>Grupo</th><th>Asistencia</th><th>Avisar</th></tr></thead><tbody>
     ${filas.map(({a,p})=>`<tr><td>${esc(nombreCompleto(a))}</td><td>${esc(grupo(a.grupoId)?.nombre||'')}</td>
-    <td><span class="tag tag-mal">${p} %</span></td></tr>`).join('')}</tbody></table></div>`;
+    <td><span class="tag tag-mal">${p} %</span></td>
+    <td>${a.telTutor ? `<button class="btn btn-sm btn-gold no-print" data-wa="${a.id}" title="Enviar aviso al tutor por WhatsApp">📲 Tutor</button>` : '<span class="muted">Sin tel.</span>'}</td></tr>`).join('')}</tbody></table></div>`;
+}
+
+/* Genera el aviso al tutor y abre WhatsApp con el mensaje listo */
+function avisarTutor(alumnoId){
+  const a = alumno(alumnoId); if(!a) return;
+  if(!a.telTutor){ toast('Este alumno no tiene teléfono de tutor registrado.'); return; }
+  const p = porcentajeAsistencia(a.id);
+  const faltas = DB.asistencias.filter(x=>x.alumnoId===a.id && x.estado==='F').length;
+  const g = grupo(a.grupoId);
+  const tel = a.telTutor.replace(/[^\d]/g,'');
+  const telFull = tel.length===10 ? '52'+tel : tel;  // México: anteponer 52 si son 10 dígitos
+  const msg =
+`Estimado(a) ${a.tutor||'tutor(a)'}:
+
+Le saluda la Preparatoria No. 50 de la UAGro (Tlacoachistlahuaca, Gro.).
+
+Le informamos sobre la asistencia de su hijo(a) *${nombreCompleto(a)}* (matrícula ${a.matricula}), del grupo ${g?.nombre||''}:
+
+• Asistencia actual: ${p}%
+• Faltas acumuladas: ${faltas}
+
+Le solicitamos atentamente comunicarse con el plantel para dar seguimiento. Su apoyo es fundamental para el desempeño del estudiante.
+
+Atentamente,
+${autorActual()==='local'?'Docente':autorActual()}`;
+  const url = `https://wa.me/${telFull}?text=${encodeURIComponent(msg)}`;
+  window.open(url, '_blank');
+  toast('Abriendo WhatsApp con el aviso listo para enviar.');
 }
 
 /* ───────────────────────── 5. PASE DE LISTA (QR + MANUAL) ───────────────────────── */
@@ -348,9 +416,10 @@ const registroDe = alumnoId => DB.asistencias.find(a =>
 function marcarAsistencia(alumnoId, estado, metodo){
   let r = registroDe(alumnoId);
   const hora = new Date().toTimeString().slice(0,5);
-  if(r){ r.estado=estado; r.metodo=metodo; r.hora=hora; }
+  if(r){ r.estado=estado; r.metodo=metodo; r.hora=hora; sellarAutoria(r, false); }
   else { r = {id:uid(), fecha:sesionPase.fecha, materiaId:sesionPase.materiaId,
     grupoId:sesionPase.grupoId, alumnoId, estado, metodo, hora};
+    sellarAutoria(r, true);
     DB.asistencias.push(r); }
   persist('asistencias', r);
 }
@@ -361,11 +430,13 @@ function pintarZonaPase(){
 
   const filaAlumno = a=>{
     const r = registroDe(a.id);
+    const autoria = r && r.editadoPor && r.editadoPor!=='local'
+      ? ` title="Registró: ${esc(r.editadoPor)}${r.editadoEn?' · '+new Date(r.editadoEn).toLocaleString('es-MX'):''}"` : '';
     return `<tr>
       <td class="mono">${esc(a.matricula)}</td>
       <td>${esc(nombreCompleto(a))}</td>
-      <td>${r ? `<span class="tag ${r.estado==='P'?'tag-ok':r.estado==='F'?'tag-mal':r.estado==='R'?'tag-aviso':'tag-info'}">${ESTADOS[r.estado]}</span>
-              ${r.metodo==='qr'?'<span class="tag tag-qr">QR</span>':''} <small class="muted">${esc(r.hora||'')}</small>` : '<span class="muted">Sin registro</span>'}</td>
+      <td${autoria}>${r ? `<span class="tag ${r.estado==='P'?'tag-ok':r.estado==='F'?'tag-mal':r.estado==='R'?'tag-aviso':'tag-info'}">${ESTADOS[r.estado]}</span>
+              ${r.metodo==='qr'?'<span class="tag tag-qr">QR</span>':''} <small class="muted">${esc(r.hora||'')}</small>${r&&r.editadoPor&&r.editadoPor!=='local'?' <small class="muted">👤</small>':''}` : '<span class="muted">Sin registro</span>'}</td>
       <td><div class="estado-botones">
         ${['P','R','J','F'].map(e=>`<button data-al="${a.id}" data-est="${e}"
           class="${r&&r.estado===e?'sel-'+e:''}" title="${ESTADOS[e]}">${e}</button>`).join('')}
@@ -512,9 +583,9 @@ function guardarCalificaciones(){
         return;
       }
       const valor = Math.min(10, Math.max(0, +inp.value));
-      if(existente){ if(existente.valor!==valor){ existente.valor = valor; cambiadas.push(existente); } }
+      if(existente){ if(existente.valor!==valor){ existente.valor = valor; sellarAutoria(existente, false); cambiadas.push(existente); } }
       else { const n = {id:uid(), alumnoId, materiaId:sesionCal.materiaId, parcial:sesionCal.parcial, rubro, valor};
-        DB.calificaciones.push(n); cambiadas.push(n); }
+        sellarAutoria(n, true); DB.calificaciones.push(n); cambiadas.push(n); }
     });
   });
   if(cambiadas.length) persist('calificaciones', cambiadas);
@@ -764,17 +835,19 @@ function vistaGrupos(el){
   const pintar = ()=>{
     const lista = alumnosDeGrupo(grupoSel);
     $('#listaAl').innerHTML = lista.length ? `<div class="table-wrap"><table>
-      <thead><tr><th>Matrícula</th><th>Alumno</th><th>Padre / tutor</th><th>Tel. tutor</th><th>Asistencia global</th>${admin?'<th></th>':''}</tr></thead><tbody>
+      <thead><tr><th>Matrícula</th><th>Alumno</th><th>Padre / tutor</th><th>Tel. tutor</th><th>Asistencia global</th><th>Avisar</th>${admin?'<th></th>':''}</tr></thead><tbody>
       ${lista.map(a=>{
         const p = porcentajeAsistencia(a.id);
         return `<tr><td class="mono">${esc(a.matricula)}</td><td><strong>${esc(nombreCompleto(a))}</strong></td>
         <td>${esc(a.tutor||'—')}</td><td class="mono">${esc(a.telTutor||'—')}</td>
         <td>${p===null?'<span class="muted">Sin registros</span>':`<span class="tag ${p>=80?'tag-ok':'tag-mal'}">${p} %</span>`}</td>
+        <td>${a.telTutor?`<button class="btn btn-sm btn-gold no-print" data-wa="${a.id}" title="Avisar al tutor por WhatsApp">📲</button>`:'<span class="muted">—</span>'}</td>
         ${admin?`<td><button class="btn btn-sm btn-outline" data-ed="${a.id}">Editar</button>
             <button class="btn btn-sm btn-danger" data-el="${a.id}">Baja</button></td>`:''}</tr>`;}).join('')}
       </tbody></table></div>`
     : '<div class="vacio card"><span class="icono">🎓</span>Este grupo aún no tiene alumnos inscritos.</div>';
 
+    $('#listaAl').querySelectorAll('[data-wa]').forEach(b=>b.addEventListener('click',()=>avisarTutor(b.dataset.wa)));
     if(admin){
     $('#listaAl').querySelectorAll('[data-ed]').forEach(b=>b.addEventListener('click',()=>formAlumno(b.dataset.ed)));
     $('#listaAl').querySelectorAll('[data-el]').forEach(b=>b.addEventListener('click',()=>{
@@ -987,7 +1060,8 @@ function vistaConsultas(el){
         <p><strong>${esc(nombreCompleto(a))}</strong></p>
         <p class="mono">${esc(a.matricula)}</p>
         <p class="muted">${esc(g?.nombre||'')} · ${esc(g?.turno||'')} · Semestre ${g?.semestre||''}</p>
-        <p class="muted">Tutor: ${esc(a.tutor||'No registrado')}</p></div>
+        <p class="muted">Tutor: ${esc(a.tutor||'No registrado')}</p>
+        <button class="btn btn-gold btn-sm" id="verCredencial" style="margin-top:.6rem">🪪 Ver mi credencial QR</button></div>
       <div class="card"><h3>📋 Asistencia global</h3>
         <p style="font-family:var(--display);font-size:2rem;font-weight:800;color:${pGlobal===null?'var(--gris-600)':pGlobal>=80?'var(--ok)':'var(--mal)'}">${pGlobal===null?'—':pGlobal+' %'}</p>
         <div class="barra-asistencia"><div style="width:${pGlobal||0}%"></div></div>
@@ -1003,9 +1077,43 @@ function vistaConsultas(el){
       :'<p class="muted">El grupo aún no tiene materias en su horario.</p>'}
       <p class="muted" style="margin-top:.6rem">Calificación mínima aprobatoria: 6.0. Si tienes dudas, acude con el docente de la materia o a la dirección del plantel.</p>
     </div>`;
+    $('#verCredencial')?.addEventListener('click', ()=>modalCredencialDigital(a.id));
   };
   $('#btnConsultar').addEventListener('click', consultar);
   $('#busMatricula').addEventListener('keydown', e=>{ if(e.key==='Enter') consultar(); });
+}
+
+/* Credencial digital QR mostrada en el celular del alumno (sin imprimir) */
+function modalCredencialDigital(alumnoId){
+  const a = alumno(alumnoId); if(!a) return;
+  const g = grupo(a.grupoId);
+  abrirModal('Mi credencial digital', `
+    <p class="muted" style="margin-bottom:.8rem">Muestra este código al docente para registrar tu asistencia. Mantén el brillo de la pantalla al máximo. No la compartas: es personal.</p>
+    <div style="display:flex;justify-content:center">
+      <div class="credencial" style="margin:0 auto">
+        <div class="cred-franja"><strong>PREPARATORIA No. 50 · UAGro</strong><span>${esc(DB.plantel.ciclo)}</span></div>
+        <div class="cred-cuerpo">
+          <div class="cred-qr" id="qrDigital"></div>
+          <div class="cred-datos">
+            <h4>${esc(nombreCompleto(a))}</h4>
+            <p class="mono">${esc(a.matricula)}</p>
+            <p class="muted">${esc(g?.nombre||'')} · ${esc(g?.turno||'')}</p>
+            <p class="muted" style="font-size:.7rem">${esc(DB.plantel.ciudad||'Tlacoachistlahuaca, Gro.')}</p>
+          </div>
+        </div>
+        <div class="cred-pie"></div>
+      </div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-primary" id="cdCerrar">Cerrar</button></div>`,
+  body=>{
+    body.querySelector('#cdCerrar').addEventListener('click', cerrarModal);
+    if(typeof QRCode!=='undefined'){
+      new QRCode(body.querySelector('#qrDigital'),
+        {text:`P50|${a.matricula}`, width:128, height:128, correctLevel:QRCode.CorrectLevel.M});
+    } else {
+      body.querySelector('#qrDigital').innerHTML = '<p class="muted" style="padding:1rem">No se pudo generar el código. Revisa tu conexión.</p>';
+    }
+  });
 }
 
 /* ───────────────────────── 13. REPORTES Y EXPORTACIÓN ───────────────────────── */
@@ -1101,12 +1209,12 @@ function vistaReportes(el){
     const regs = DB.asistencias.filter(a=>a.grupoId===g && (!m||a.materiaId===m) && a.fecha>=d && a.fecha<=h)
       .sort((x,y)=>x.fecha.localeCompare(y.fecha));
     if(!regs.length){ toast('No hay registros en ese rango.'); return; }
-    const filas = [['Fecha','Hora','Matrícula','Alumno','Grupo','Materia','Estado','Método'].join(',')];
+    const filas = [['Fecha','Hora','Matrícula','Alumno','Grupo','Materia','Estado','Método','Capturó por'].join(',')];
     regs.forEach(r=>{
       const a=alumno(r.alumnoId);
       filas.push([r.fecha, r.hora||'', a?.matricula||'', `"${a?nombreCompleto(a):''}"`,
         `"${grupo(r.grupoId)?.nombre||''}"`, `"${materia(r.materiaId)?.nombre||''}"`,
-        ESTADOS[r.estado], r.metodo].join(','));
+        ESTADOS[r.estado], r.metodo, `"${r.editadoPor||''}"`].join(','));
     });
     descargarTexto(`asistencia_${grupo(g)?.nombre.replace(/[^\w]/g,'')}_${d}_a_${h}.csv`, filas.join('\n'));
     toast('Reporte de asistencia descargado.');
@@ -1222,6 +1330,11 @@ function generarBoletasPDF(lista){
     const pGlobal = porcentajeAsistencia(a.id);
     doc.setFont('helvetica','bold');
     doc.text(`Asistencia global: ${pGlobal===null?'Sin registros':pGlobal+' %'}`, 14, 57);
+    // Folio y ciclo (lado derecho)
+    const W0 = doc.internal.pageSize.getWidth();
+    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(91,107,130);
+    doc.text(`Ciclo escolar: ${DB.plantel.ciclo||''}`, W0-14, 45, {align:'right'});
+    doc.text(`Folio: ${a.matricula}-${(DB.plantel.ciclo||'').replace(/[^\w]/g,'')}`, W0-14, 51, {align:'right'});
 
     // Tabla de materias
     const materiasGrupo = [...new Set(DB.horarios.filter(h=>h.grupoId===a.grupoId).map(h=>h.materiaId))]
@@ -1250,18 +1363,37 @@ function generarBoletasPDF(lista){
       }
     });
 
-    // Promedio general y firmas
+    // Promedio general en recuadro destacado
     const finales = cuerpo.map(f=>parseFloat(f[6])).filter(v=>!isNaN(v));
-    let y = doc.lastAutoTable.finalY + 10;
-    doc.setFontSize(10); doc.setFont('helvetica','bold'); doc.setTextColor(11,35,66);
-    doc.text(`Promedio general: ${finales.length?(finales.reduce((s,v)=>s+v,0)/finales.length).toFixed(1):'—'}`, 14, y);
-    doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(91,107,130);
-    doc.text('Calificación mínima aprobatoria: 6.0 · El % de asistencia considera presente, retardo y falta justificada.', 14, y+6);
-    y += 30;
-    doc.setDrawColor(150); doc.line(20,y,85,y); doc.line(120,y,185,y);
-    doc.setFontSize(8); doc.setTextColor(22,35,58);
-    doc.text('Docente / Tutor de grupo', 52.5, y+5, {align:'center'});
-    doc.text('Padre o tutor', 152.5, y+5, {align:'center'});
+    const promGral = finales.length?(finales.reduce((s,v)=>s+v,0)/finales.length):null;
+    let y = doc.lastAutoTable.finalY + 8;
+    const W = doc.internal.pageSize.getWidth();
+    doc.setFillColor(11,35,66);
+    doc.roundedRect(W-78, y, 64, 16, 2, 2, 'F');
+    doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(9);
+    doc.text('PROMEDIO GENERAL', W-46, y+6, {align:'center'});
+    doc.setTextColor(232,196,92); doc.setFontSize(13);
+    doc.text(promGral===null?'—':promGral.toFixed(1), W-46, y+13, {align:'center'});
+
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.5); doc.setTextColor(91,107,130);
+    doc.text('Calificación mínima aprobatoria: 6.0. El porcentaje de asistencia considera', 14, y+5);
+    doc.text('presente, retardo y falta justificada como asistencia efectiva.', 14, y+10);
+    doc.text(`Documento informativo emitido por la Preparatoria No. 50 de la UAGro.`, 14, y+15);
+    doc.text(`Expedido en ${DB.plantel.ciudad||'Tlacoachistlahuaca, Gro.'} el ${new Date().toLocaleDateString('es-MX',{day:'numeric',month:'long',year:'numeric'})}.`, 14, y+20);
+
+    // Tres firmas
+    y += 42;
+    doc.setDrawColor(120);
+    const fx = [30, 105, 180];
+    fx.forEach(x=>doc.line(x-22, y, x+22, y));
+    doc.setFontSize(7.5); doc.setTextColor(22,35,58); doc.setFont('helvetica','bold');
+    doc.text('Docente', fx[0], y+5, {align:'center'});
+    doc.text('Padre o tutor', fx[1], y+5, {align:'center'});
+    doc.text('Dirección del plantel', fx[2], y+5, {align:'center'});
+    doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(120,120,120);
+    doc.text('Nombre y firma', fx[0], y+9, {align:'center'});
+    doc.text('Nombre y firma', fx[1], y+9, {align:'center'});
+    doc.text('Sello y firma', fx[2], y+9, {align:'center'});
   });
   piePDF(doc);
   const nombre = lista.length===1
@@ -1681,11 +1813,203 @@ function cerrarKiosko(){
   } else fin();
 }
 
-/* ───────────────────────── 19. ARRANQUE ───────────────────────── */
+/* ───────────────────────── 19. BITÁCORA Y PLANEACIÓN (NEM) ───────────────────────── */
+let sesionBit = { fecha:hoyISO(), materiaId:null, grupoId:null };
+/* Campos formativos de la Nueva Escuela Mexicana */
+const CAMPOS_NEM = ['Lenguajes','Saberes y Pensamiento Científico','Ética, Naturaleza y Sociedades','De lo Humano y lo Comunitario'];
+
+function vistaBitacora(el){
+  const matsVis = misMaterias(), grusVis = misGrupos();
+  if(!matsVis.length){ el.innerHTML = avisoSinAsignacion(); return; }
+  if(!sesionBit.materiaId || !matsVis.some(m=>m.id===sesionBit.materiaId)) sesionBit.materiaId = matsVis[0]?.id;
+  if(!sesionBit.grupoId || !grusVis.some(g=>g.id===sesionBit.grupoId))   sesionBit.grupoId   = grusVis[0]?.id;
+
+  el.innerHTML = `
+  <div class="card">
+    <div class="toolbar">
+      <div class="field"><label>Fecha</label><input type="date" id="bitFecha" value="${sesionBit.fecha}"></div>
+      <div class="field"><label>Materia</label>
+        <select id="bitMateria">${opciones(matsVis, m=>`${m.clave} · ${m.nombre}`, sesionBit.materiaId)}</select></div>
+      <div class="field"><label>Grupo</label>
+        <select id="bitGrupo">${opciones(grusVis, g=>g.nombre, sesionBit.grupoId)}</select></div>
+      <div class="spacer"></div>
+      <button class="btn btn-primary" id="bitNueva">＋ Registrar sesión</button>
+    </div>
+    <div id="bitZona"></div>
+  </div>`;
+
+  const ref = ()=>{ sesionBit.fecha=$('#bitFecha').value; sesionBit.materiaId=$('#bitMateria').value;
+    sesionBit.grupoId=$('#bitGrupo').value; pintarBit(); };
+  ['bitFecha','bitMateria','bitGrupo'].forEach(id=>$('#'+id).addEventListener('change', ref));
+  $('#bitNueva').addEventListener('click', ()=>formBitacora(null));
+  pintarBit();
+}
+
+function pintarBit(){
+  const zona = $('#bitZona'); if(!zona) return;
+  const regs = DB.bitacora
+    .filter(b=>b.materiaId===sesionBit.materiaId && b.grupoId===sesionBit.grupoId)
+    .sort((a,b)=>b.fecha.localeCompare(a.fecha));
+  if(!regs.length){ zona.innerHTML = '<div class="vacio"><span class="icono">📓</span>Aún no hay sesiones registradas para esta materia y grupo. Usa «Registrar sesión» para documentar tu clase.</div>'; return; }
+  zona.innerHTML = regs.map(b=>`
+    <div class="card" style="margin-bottom:.8rem;border-left:4px solid var(--azul-500)">
+      <div style="display:flex;justify-content:space-between;gap:.6rem;align-items:start">
+        <div>
+          <h3 style="margin-bottom:.2rem">${esc(b.tema||'Sesión sin tema')}</h3>
+          <p class="muted mono">${esc(new Date(b.fecha+'T12:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'}))}</p>
+          ${b.campo?`<span class="tag tag-info">${esc(b.campo)}</span>`:''}
+        </div>
+        <div style="display:flex;gap:.3rem">
+          <button class="btn btn-sm btn-outline" data-edb="${b.id}">Editar</button>
+          <button class="btn btn-sm btn-danger" data-elb="${b.id}">Eliminar</button>
+        </div>
+      </div>
+      ${b.actividades?`<p style="margin-top:.5rem"><strong>Actividades:</strong> ${esc(b.actividades)}</p>`:''}
+      ${b.tarea?`<p style="margin-top:.3rem"><strong>Tarea / encargo:</strong> ${esc(b.tarea)}</p>`:''}
+      ${b.observaciones?`<p style="margin-top:.3rem;color:var(--gris-600)"><strong>Observaciones:</strong> ${esc(b.observaciones)}</p>`:''}
+      ${b.editadoPor&&b.editadoPor!=='local'?`<p class="muted" style="margin-top:.4rem;font-size:.74rem">👤 ${esc(b.editadoPor)}</p>`:''}
+    </div>`).join('');
+
+  zona.querySelectorAll('[data-edb]').forEach(x=>x.addEventListener('click',()=>formBitacora(x.dataset.edb)));
+  zona.querySelectorAll('[data-elb]').forEach(x=>x.addEventListener('click',()=>{
+    if(!confirm('¿Eliminar esta sesión de la bitácora?')) return;
+    DB.bitacora = DB.bitacora.filter(b=>b.id!==x.dataset.elb);
+    persistDel('bitacora', x.dataset.elb);
+    pintarBit(); toast('Sesión eliminada.');
+  }));
+}
+
+function formBitacora(id){
+  const b = id ? DB.bitacora.find(x=>x.id===id)
+    : {fecha:sesionBit.fecha, materiaId:sesionBit.materiaId, grupoId:sesionBit.grupoId,
+       campo:'', tema:'', actividades:'', tarea:'', observaciones:''};
+  abrirModal(id?'Editar sesión':'Registrar sesión de clase', `
+    <div class="form-grid">
+      <div class="field"><label>Fecha</label><input type="date" id="bFecha" value="${esc(b.fecha)}"></div>
+      <div class="field"><label>Campo formativo (NEM)</label>
+        <select id="bCampo"><option value="">— Selecciona —</option>
+          ${CAMPOS_NEM.map(c=>`<option ${c===b.campo?'selected':''}>${esc(c)}</option>`).join('')}</select></div>
+      <div class="field full"><label>Tema o contenido de la sesión *</label><input id="bTema" value="${esc(b.tema)}" placeholder="Ej. Ecuaciones de primer grado"></div>
+      <div class="field full"><label>Actividades realizadas</label><textarea id="bAct" rows="3" placeholder="Describe lo que se trabajó en clase">${esc(b.actividades)}</textarea></div>
+      <div class="field full"><label>Tarea o encargo</label><input id="bTarea" value="${esc(b.tarea)}" placeholder="Opcional"></div>
+      <div class="field full"><label>Observaciones</label><textarea id="bObs" rows="2" placeholder="Incidencias, avances, acuerdos (opcional)">${esc(b.observaciones)}</textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" id="bCan">Cancelar</button>
+    <button class="btn btn-primary" id="bOk">Guardar sesión</button></div>`,
+  body=>{
+    body.querySelector('#bCan').addEventListener('click', cerrarModal);
+    body.querySelector('#bOk').addEventListener('click', ()=>{
+      const tema = body.querySelector('#bTema').value.trim();
+      if(!tema){ toast('Escribe al menos el tema de la sesión.'); return; }
+      const datos = {fecha:body.querySelector('#bFecha').value, materiaId:sesionBit.materiaId, grupoId:sesionBit.grupoId,
+        campo:body.querySelector('#bCampo').value, tema,
+        actividades:body.querySelector('#bAct').value.trim(),
+        tarea:body.querySelector('#bTarea').value.trim(),
+        observaciones:body.querySelector('#bObs').value.trim()};
+      let obj;
+      if(id){ obj = DB.bitacora.find(x=>x.id===id); Object.assign(obj, datos); sellarAutoria(obj,false); }
+      else { obj = {id:uid(), ...datos}; sellarAutoria(obj,true); DB.bitacora.push(obj); }
+      persist('bitacora', obj);
+      cerrarModal(); pintarBit(); toast('Sesión guardada en la bitácora.');
+    });
+  });
+}
+
+/* ───────────────────────── 20. CALENDARIO ESCOLAR ───────────────────────── */
+const TIPOS_EVENTO = {
+  parcial:{label:'Periodo de parcial', color:'var(--azul-500)'},
+  evento:{label:'Evento escolar', color:'var(--oro-500)'},
+  suspension:{label:'Día no laborable', color:'var(--mal)'},
+  entrega:{label:'Entrega / fecha límite', color:'var(--ok)'},
+};
+function vistaCalendario(el){
+  const admin = (typeof esAdmin==='function') ? esAdmin() : true;
+  el.innerHTML = `
+  ${!admin?'<p class="muted" style="margin-bottom:.8rem">Consulta el calendario del ciclo escolar. Su edición está a cargo de la administración del plantel.</p>':''}
+  <div class="toolbar">
+    <div class="spacer"></div>
+    ${admin?'<button class="btn btn-primary" id="calNuevo">＋ Agregar al calendario</button>':''}
+  </div>
+  <div class="grid grid-2" id="calZona"></div>`;
+
+  if(admin) $('#calNuevo').addEventListener('click', ()=>formCalendario(null));
+
+  const pintar = ()=>{
+    const hoy = hoyISO();
+    const evs = [...DB.calendario].sort((a,b)=>a.fecha.localeCompare(b.fecha));
+    const proximos = evs.filter(e=>(e.fechaFin||e.fecha)>=hoy);
+    const pasados = evs.filter(e=>(e.fechaFin||e.fecha)<hoy).reverse();
+    const tarjeta = e=>{
+      const t = TIPOS_EVENTO[e.tipo]||TIPOS_EVENTO.evento;
+      const rango = e.fechaFin && e.fechaFin!==e.fecha
+        ? `${new Date(e.fecha+'T12:00').toLocaleDateString('es-MX',{day:'numeric',month:'short'})} – ${new Date(e.fechaFin+'T12:00').toLocaleDateString('es-MX',{day:'numeric',month:'short'})}`
+        : new Date(e.fecha+'T12:00').toLocaleDateString('es-MX',{weekday:'long',day:'numeric',month:'long'});
+      return `<div class="card" style="border-left:4px solid ${t.color}">
+        <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:start">
+          <div><h3 style="margin-bottom:.2rem">${esc(e.titulo)}</h3>
+            <p class="muted mono">${esc(rango)}</p>
+            <span class="tag tag-info">${esc(t.label)}</span></div>
+          ${admin?`<div style="display:flex;gap:.3rem;flex-direction:column">
+            <button class="btn btn-sm btn-outline" data-edc="${e.id}">Editar</button>
+            <button class="btn btn-sm btn-danger" data-elc="${e.id}">Quitar</button></div>`:''}
+        </div>
+        ${e.nota?`<p style="margin-top:.4rem;color:var(--gris-600)">${esc(e.nota)}</p>`:''}
+      </div>`;
+    };
+    $('#calZona').innerHTML = `
+      <div style="grid-column:1/-1"><h3 style="margin:.3rem 0">📌 Próximos</h3></div>
+      ${proximos.length?proximos.map(tarjeta).join(''):'<div class="vacio card" style="grid-column:1/-1"><span class="icono">📅</span>Sin eventos próximos registrados.</div>'}
+      ${pasados.length?`<div style="grid-column:1/-1"><h3 style="margin:.8rem 0 .3rem;color:var(--gris-600)">Anteriores</h3></div>${pasados.map(tarjeta).join('')}`:''}`;
+
+    if(admin){
+      $('#calZona').querySelectorAll('[data-edc]').forEach(b=>b.addEventListener('click',()=>formCalendario(b.dataset.edc)));
+      $('#calZona').querySelectorAll('[data-elc]').forEach(b=>b.addEventListener('click',()=>{
+        if(!confirm('¿Quitar este evento del calendario?')) return;
+        DB.calendario = DB.calendario.filter(e=>e.id!==b.dataset.elc);
+        persistDel('calendario', b.dataset.elc);
+        pintar(); toast('Evento eliminado.');
+      }));
+    }
+  };
+  pintar();
+}
+function formCalendario(id){
+  const e = id ? DB.calendario.find(x=>x.id===id)
+    : {fecha:hoyISO(), fechaFin:'', titulo:'', tipo:'evento', nota:''};
+  abrirModal(id?'Editar evento':'Agregar al calendario', `
+    <div class="form-grid">
+      <div class="field full"><label>Título *</label><input id="cTitulo" value="${esc(e.titulo)}" placeholder="Ej. Primer parcial / Suspensión por consejo técnico"></div>
+      <div class="field"><label>Tipo</label>
+        <select id="cTipo">${Object.entries(TIPOS_EVENTO).map(([k,v])=>`<option value="${k}" ${k===e.tipo?'selected':''}>${esc(v.label)}</option>`).join('')}</select></div>
+      <div class="field"><label>Fecha</label><input type="date" id="cFecha" value="${esc(e.fecha)}"></div>
+      <div class="field"><label>Fecha fin (opcional)</label><input type="date" id="cFechaFin" value="${esc(e.fechaFin||'')}"></div>
+      <div class="field full"><label>Nota (opcional)</label><input id="cNota" value="${esc(e.nota||'')}"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" id="cCan">Cancelar</button>
+    <button class="btn btn-primary" id="cOk">Guardar evento</button></div>`,
+  body=>{
+    body.querySelector('#cCan').addEventListener('click', cerrarModal);
+    body.querySelector('#cOk').addEventListener('click', ()=>{
+      const titulo = body.querySelector('#cTitulo').value.trim();
+      if(!titulo){ toast('Escribe el título del evento.'); return; }
+      const fecha = body.querySelector('#cFecha').value;
+      const fechaFin = body.querySelector('#cFechaFin').value;
+      if(fechaFin && fechaFin<fecha){ toast('La fecha fin no puede ser anterior a la de inicio.'); return; }
+      const datos = {fecha, fechaFin, titulo, tipo:body.querySelector('#cTipo').value, nota:body.querySelector('#cNota').value.trim()};
+      let obj;
+      if(id){ obj = DB.calendario.find(x=>x.id===id); Object.assign(obj, datos); }
+      else { obj = {id:uid(), ...datos}; DB.calendario.push(obj); }
+      persist('calendario', obj);
+      cerrarModal(); render(); toast('Evento guardado en el calendario.');
+    });
+  });
+}
+
+/* ───────────────────────── 21. ARRANQUE ───────────────────────── */
 const VISTAS = {
   dashboard:vistaDashboard, asistencia:vistaAsistencia, calificaciones:vistaCalificaciones,
-  docentes:vistaDocentes, materias:vistaMaterias, grupos:vistaGrupos, horarios:vistaHorarios,
-  credenciales:vistaCredenciales, consultas:vistaConsultas, estadisticas:vistaEstadisticas,
-  reportes:vistaReportes,
+  bitacora:vistaBitacora, docentes:vistaDocentes, materias:vistaMaterias, grupos:vistaGrupos,
+  horarios:vistaHorarios, calendario:vistaCalendario, credenciales:vistaCredenciales,
+  consultas:vistaConsultas, estadisticas:vistaEstadisticas, reportes:vistaReportes,
 };
 iniciarSistema();   // decide modo local o nube (ver js/nube.js)

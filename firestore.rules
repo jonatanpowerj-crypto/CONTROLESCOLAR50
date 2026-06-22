@@ -1,32 +1,30 @@
 rules_version = '2';
 // ════════════════════════════════════════════════════════════════
 // REGLAS DE SEGURIDAD — SIGE Prepa 50 (Firestore)
-// Copia TODO este archivo y pégalo en:
-// Consola de Firebase → Firestore Database → Reglas → Publicar
+// Cópialo y pégalo en: Firestore → pestaña Reglas → Publicar
 //
-// OPCIÓN A (activa): lectura pública, escritura solo con sesión.
-//   ✔ Los padres y alumnos consultan desde casa SIN cuenta.
-//   ✔ Solo los docentes con sesión iniciada pueden modificar.
-//   ⚠ Cualquier persona con la dirección del sitio puede LEER los
-//     datos (nombres, asistencias, calificaciones). Valórenlo como
-//     plantel por tratarse de datos de menores.
+// NIVEL ACTUAL (sin costo, plan Spark):
+//   - Consulta pública para el portal de padres/alumnos.
+//   - Escritura solo para usuarios con sesión iniciada.
+//   - La separación POR DOCENTE (cada quien gestiona solo sus
+//     materias) se aplica en la INTERFAZ (app.js / nube.js): el
+//     sistema oculta y filtra todo lo que no le corresponde.
 //
-// OPCIÓN B (comentada): todo privado, se requiere sesión también
-//   para leer. El portal de padres solo funcionaría con una cuenta
-//   compartida de consulta que cree la dirección.
+//   Para una preparatoria con docentes de confianza esto es
+//   suficiente; la interfaz evita errores accidentales y el respaldo
+//   protege ante cualquier problema.
+//
+// NIVEL BLINDADO (requiere plan Blaze + Cloud Functions):
+//   Para impedir por completo que un docente escriba fuera de sus
+//   materias, se graba el rol en el token ("custom claims") con una
+//   Cloud Function y se valida aqui. Pide a tu desarrollador activar
+//   Blaze y desplegar esa funcion cuando el plantel lo decida.
 // ════════════════════════════════════════════════════════════════
 service cloud.firestore {
   match /databases/{database}/documents {
     match /{coleccion}/{documento=**} {
-
-      // ── OPCIÓN A (recomendada para empezar) ──
       allow read:  if true;
       allow write: if request.auth != null;
-
-      // ── OPCIÓN B (todo privado): borra las dos líneas de arriba
-      //    y quita las diagonales // de las dos líneas siguientes ──
-      // allow read:  if request.auth != null;
-      // allow write: if request.auth != null;
     }
   }
 }
