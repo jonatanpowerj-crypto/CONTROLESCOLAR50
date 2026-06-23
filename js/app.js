@@ -10,6 +10,78 @@
 /* ───────────────────────── 1. ALMACÉN DE DATOS ───────────────────────── */
 const CLAVE = 'sige_p50';
 const DIAS = ['Lunes','Martes','Miércoles','Jueves','Viernes'];
+
+/* ── Malla horaria oficial · Preparatoria No. 50 (turno vespertino) ──
+   8 franjas de 40 min; la de 17:40–18:15 es RECESO (no se programan clases). */
+const BLOQUES_P50 = [
+  {hi:'15:00', hf:'15:40'},
+  {hi:'15:40', hf:'16:20'},
+  {hi:'16:20', hf:'17:00'},
+  {hi:'17:00', hf:'17:40'},
+  {hi:'17:40', hf:'18:15', receso:true},   // RECESO
+  {hi:'18:15', hf:'18:55'},
+  {hi:'18:55', hf:'19:35'},
+  {hi:'19:35', hf:'20:15'},
+];
+
+/* ── Catálogo oficial · Plan de Estudios del Bachillerato General 2023 (MCCEMS) ──
+   Permite crear materias con la clave y semestre oficiales sin teclear. */
+const PLAN_2023 = [
+  {sem:1, clave:'23B04101', nombre:'La Materia y sus Interacciones'},
+  {sem:1, clave:'23B04102', nombre:'Humanidades I'},
+  {sem:1, clave:'23B04103', nombre:'Ciencias Sociales I'},
+  {sem:1, clave:'23B04104', nombre:'Laboratorio de Investigación I'},
+  {sem:1, clave:'23B04105', nombre:'Lengua y Comunicación I'},
+  {sem:1, clave:'23B04106', nombre:'Inglés I'},
+  {sem:1, clave:'23B04107', nombre:'Pensamiento Matemático I'},
+  {sem:1, clave:'23B04108', nombre:'Cultura Digital I'},
+  {sem:1, clave:'23B04109', nombre:'Actividades Físico-Deportivas I'},
+  {sem:1, clave:'23B04151', nombre:'Tutorías I'},
+  {sem:2, clave:'23B04211', nombre:'Conservación de la Energía y sus Interacciones con la Materia'},
+  {sem:2, clave:'23B04212', nombre:'Temas Selectos de Ciencias Naturales I'},
+  {sem:2, clave:'23B04213', nombre:'Humanidades II'},
+  {sem:2, clave:'23B04214', nombre:'Ciencias Sociales II'},
+  {sem:2, clave:'23B04215', nombre:'Lengua y Comunicación II'},
+  {sem:2, clave:'23B04216', nombre:'Inglés II'},
+  {sem:2, clave:'23B04217', nombre:'Pensamiento Matemático II'},
+  {sem:2, clave:'23B04218', nombre:'Cultura Digital II'},
+  {sem:2, clave:'23B04219', nombre:'Actividades Físico-Deportivas II'},
+  {sem:2, clave:'23B04252', nombre:'Tutorías II'},
+  {sem:3, clave:'23B04320', nombre:'Temas Selectos de Ciencias Naturales II'},
+  {sem:3, clave:'23B04323', nombre:'Conciencia Histórica I'},
+  {sem:3, clave:'23B04324', nombre:'Lengua y Comunicación III'},
+  {sem:3, clave:'23B04325', nombre:'Inglés III'},
+  {sem:3, clave:'23B04326', nombre:'Pensamiento Matemático III'},
+  {sem:3, clave:'23B04327', nombre:'Actividades Artísticas y Culturales I'},
+  {sem:3, clave:'23B04328', nombre:'Desarrollo Emocional'},
+  {sem:3, clave:'23B04353', nombre:'Tutorías III'},
+  {sem:4, clave:'23B04429', nombre:'Reacciones Químicas: Conservación de la Materia y Formación de Nuevas Sustancias'},
+  {sem:4, clave:'23B04431', nombre:'Conciencia Histórica II'},
+  {sem:4, clave:'23B04432', nombre:'Pensamiento Literario I'},
+  {sem:4, clave:'23B04433', nombre:'Inglés IV'},
+  {sem:4, clave:'23B04434', nombre:'Pensamiento Matemático IV'},
+  {sem:4, clave:'23B04435', nombre:'Temas Selectos de Matemáticas I'},
+  {sem:4, clave:'23B04436', nombre:'Actividades Artísticas y Culturales II'},
+  {sem:4, clave:'23B04454', nombre:'Tutorías IV'},
+  {sem:4, clave:'23B04457', nombre:'Temas Selectos de Ciencias Naturales III'},
+  {sem:4, clave:'23B04460', nombre:'Humanidades III'},
+  {sem:5, clave:'23B04537', nombre:'Organismos, Estructuras y Procesos. Herencia y Evolución Biológica'},
+  {sem:5, clave:'23B04538', nombre:'La Energía en los Procesos de la Vida Diaria'},
+  {sem:5, clave:'23B04539', nombre:'Ciencias Sociales III'},
+  {sem:5, clave:'23B04540', nombre:'Pensamiento Literario II'},
+  {sem:5, clave:'23B04541', nombre:'Temas Selectos de Matemáticas II'},
+  {sem:5, clave:'23B04542', nombre:'Actividades Artísticas y Culturales III'},
+  {sem:5, clave:'23B04543', nombre:'Educación Integral en Salud'},
+  {sem:5, clave:'23B04555', nombre:'Tutorías V'},
+  {sem:6, clave:'23B04644', nombre:'Ecosistemas: Interacciones, Energía y Dinámica'},
+  {sem:6, clave:'23B04645', nombre:'La Realidad Económica de México'},
+  {sem:6, clave:'23B04646', nombre:'Geografía'},
+  {sem:6, clave:'23B04647', nombre:'Construcción Colectiva de lo Social'},
+  {sem:6, clave:'23B04648', nombre:'Laboratorio de Investigación II'},
+  {sem:6, clave:'23B04649', nombre:'Temas Selectos de Matemáticas III'},
+  {sem:6, clave:'23B04650', nombre:'Práctica y Colaboración Ciudadana'},
+  {sem:6, clave:'23B04656', nombre:'Tutorías VI'},
+];
 const ESTADOS = { P:'Presente', R:'Retardo', J:'Justificada', F:'Falta' };
 
 const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2,7);
@@ -666,9 +738,12 @@ function vistaMaterias(el){
   <div class="toolbar">
     <input class="search" id="busMat" placeholder="Buscar materia…">
     <div class="spacer"></div>
+    ${esAdmin()?'<button class="btn btn-gold" id="planOficial">📋 Cargar del plan oficial 2023</button>':''}
     <button class="btn btn-primary" id="nuevaMat">＋ Nueva materia</button>
   </div>
   <div id="listaMat" class="grid grid-2"></div>`;
+
+  if(esAdmin()) $('#planOficial').addEventListener('click', ()=>modalPlanOficial());
 
   const pintar = ()=>{
     const q = ($('#busMat').value||'').toLowerCase();
@@ -708,6 +783,56 @@ function vistaMaterias(el){
   $('#nuevaMat').addEventListener('click', ()=>formMateria(null));
   pintar();
 }
+/* Modal: cargar materias desde el catálogo oficial del Plan 2023 */
+function modalPlanOficial(){
+  let semSel = 1;
+  const yaExiste = clave => DB.materias.some(m=>m.clave===clave);
+
+  abrirModal('📋 Plan de Estudios · Bachillerato General 2023', `
+    <p class="muted">Selecciona el semestre y marca las materias a crear. Se generan con su clave oficial; las que ya existen aparecen deshabilitadas. Después podrás asignarles docente, horas y rubros.</p>
+    <div class="field" style="margin:.7rem 0"><label>Semestre</label>
+      <select id="poSem">${[1,2,3,4,5,6].map(s=>`<option value="${s}">${['Primero','Segundo','Tercero','Cuarto','Quinto','Sexto'][s-1]} semestre</option>`).join('')}</select></div>
+    <div style="margin-bottom:.5rem"><button class="btn btn-sm btn-outline" id="poTodas">Marcar todas</button></div>
+    <div id="poLista" style="max-height:320px;overflow-y:auto"></div>
+    <div class="modal-foot"><button class="btn btn-outline" id="poCan">Cancelar</button>
+    <button class="btn btn-primary" id="poOk">Crear materias seleccionadas</button></div>`,
+  body=>{
+    const pintarLista = ()=>{
+      const mats = PLAN_2023.filter(m=>m.sem===semSel);
+      body.querySelector('#poLista').innerHTML = `<div class="table-wrap"><table><tbody>
+        ${mats.map((m,i)=>{
+          const existe = yaExiste(m.clave);
+          return `<tr>
+            <td style="width:38px"><input type="checkbox" data-i="${i}" ${existe?'disabled':''} style="width:18px;height:18px"></td>
+            <td class="mono" style="white-space:nowrap">${esc(m.clave)}</td>
+            <td>${esc(m.nombre)}</td>
+            <td>${existe?'<span class="tag tag-ok">Ya existe</span>':''}</td></tr>`;
+        }).join('')}</tbody></table></div>`;
+    };
+    pintarLista();
+    body.querySelector('#poSem').addEventListener('change', e=>{ semSel=+e.target.value; pintarLista(); });
+    body.querySelector('#poTodas').addEventListener('click', ()=>{
+      body.querySelectorAll('#poLista input[type=checkbox]:not(:disabled)').forEach(c=>c.checked=true);
+    });
+    body.querySelector('#poCan').addEventListener('click', cerrarModal);
+    body.querySelector('#poOk').addEventListener('click', ()=>{
+      const mats = PLAN_2023.filter(m=>m.sem===semSel);
+      const elegidas = [...body.querySelectorAll('#poLista input[type=checkbox]:checked')].map(c=>mats[+c.dataset.i]);
+      if(!elegidas.length){ toast('Marca al menos una materia.'); return; }
+      const rubrosDefault = [
+        {nombre:'Examen', peso:40},
+        {nombre:'Productos y trabajos', peso:35},
+        {nombre:'Participación y actitud', peso:25},
+      ];
+      const nuevas = elegidas.map(m=>({id:uid(), clave:m.clave, nombre:m.nombre, semestre:m.sem,
+        horasSemana:0, sesionesSemana:0, docenteId:null, rubros:rubrosDefault.map(r=>({...r}))}));
+      nuevas.forEach(n=>DB.materias.push(n));
+      persist('materias', nuevas);
+      cerrarModal(); render(); toast(`${nuevas.length} materia(s) creada(s) desde el plan oficial.`);
+    });
+  });
+}
+
 function formMateria(id){
   const m = id ? materia(id) : {clave:'',nombre:'',semestre:1,docenteId:'',rubros:[{nombre:'Examen parcial',peso:40},{nombre:'Tareas y trabajos',peso:30},{nombre:'Participación',peso:30}]};
   const filaRubro = (r,i)=>`<tr>
@@ -722,11 +847,16 @@ function formMateria(id){
       <div class="field"><label>Semestre</label>
         <select id="fSem">${[1,2,3,4,5,6].map(s=>`<option ${s===m.semestre?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field full"><label>Nombre de la materia *</label><input id="fNom" value="${esc(m.nombre)}"></div>
+      <div class="field"><label>Horas por semana</label>
+        <input type="number" id="fHoras" min="0" max="20" value="${m.horasSemana||0}" placeholder="Ej. 4"></div>
+      <div class="field"><label>Sesiones por semana</label>
+        <input type="number" id="fSes" min="0" max="5" value="${m.sesionesSemana||0}" placeholder="Ej. 2"></div>
       ${(typeof esAdmin==='function' && !esAdmin())
         ? `<input type="hidden" id="fDoc" value="${esc(m.docenteId || (typeof PERFIL!=='undefined'?PERFIL.docenteId:'') || '')}">`
         : `<div class="field full"><label>Docente responsable</label>
         <select id="fDoc"><option value="">Sin asignar</option>${opciones(DB.docentes, d=>d.nombre, m.docenteId)}</select></div>`}
     </div>
+    <p class="muted" style="font-size:.78rem;margin-top:.3rem">💡 Estos datos los usa el constructor automático de horarios. Para <strong>Cultura Digital</strong>, el sistema reparte las sesiones en días separados (2 o 3 días) automáticamente.</p>
     <h3 style="margin:1rem 0 .4rem">Rubros de evaluación <span class="muted" id="sumaRubros"></span></h3>
     <div class="table-wrap"><table><thead><tr><th>Rubro</th><th>Peso %</th><th></th></tr></thead>
       <tbody id="tbRubros"></tbody></table></div>
@@ -761,6 +891,8 @@ function formMateria(id){
       }
       rubros = rubros.filter(r=>r.nombre.trim());
       const datos = {clave, nombre, semestre:+body.querySelector('#fSem').value,
+        horasSemana:+body.querySelector('#fHoras').value||0,
+        sesionesSemana:+body.querySelector('#fSes').value||0,
         docenteId: docId, rubros};
       let obj;
       if(id){ obj = materia(id); Object.assign(obj, datos); }
@@ -907,33 +1039,46 @@ function vistaHorarios(el){
     <div class="field"><label>Grupo</label>
       <select id="horSel">${opciones(grusVis, g=>`${g.nombre} · ${g.turno}`, horGrupo)}</select></div>
     <div class="spacer"></div>
+    ${!esAdmin()?'<button class="btn btn-outline" id="miHorario">📅 Mi horario semanal</button>':''}
+    <button class="btn btn-outline" id="horPDF">🧾 Exportar PDF</button>
+    ${esAdmin()?'<button class="btn btn-gold" id="armarHorario">🪄 Armar horario automático</button>':''}
     <button class="btn btn-primary" id="nuevoHor">＋ Agregar clase</button>
   </div>
   <div id="horZona"></div>`;
 
   $('#horSel').addEventListener('change', e=>{ horGrupo=e.target.value; pintar(); });
+  if(esAdmin()) $('#armarHorario').addEventListener('click', ()=>modalArmarHorario());
+  if(!esAdmin()) $('#miHorario')?.addEventListener('click', ()=>modalMiHorario());
+  $('#horPDF').addEventListener('click', ()=>exportarHorarioPDF(esAdmin()?horGrupo:null));
   $('#nuevoHor').addEventListener('click', ()=>{
     abrirModal('Agregar clase al horario', `
       <div class="form-grid">
         <div class="field full"><label>Materia</label>
           <select id="hMat">${opciones(misMaterias(), m=>`${m.clave} · ${m.nombre}`)}</select></div>
+        <div class="field full"><label>Bloque horario</label>
+          <select id="hBloque">${BLOQUES_P50.filter(b=>!b.receso).map(b=>`<option value="${b.hi}|${b.hf}">${b.hi} – ${b.hf}</option>`).join('')}</select></div>
         <div class="field"><label>Día</label>
           <select id="hDia">${DIAS.map(d=>`<option>${d}</option>`).join('')}</select></div>
         <div class="field"><label>Aula</label><input id="hAula" placeholder="Aula 4"></div>
-        <div class="field"><label>Hora inicio</label><input type="time" id="hIni" value="07:00"></div>
-        <div class="field"><label>Hora fin</label><input type="time" id="hFin" value="08:40"></div>
       </div>
       <div class="modal-foot"><button class="btn btn-outline" id="hCan">Cancelar</button>
       <button class="btn btn-primary" id="hOk">Agregar al horario</button></div>`,
     body=>{
       body.querySelector('#hCan').addEventListener('click', cerrarModal);
       body.querySelector('#hOk').addEventListener('click', ()=>{
-        const hi = body.querySelector('#hIni').value, hf = body.querySelector('#hFin').value;
+        const [hi, hf] = body.querySelector('#hBloque').value.split('|');
         const dia = body.querySelector('#hDia').value;
-        if(hf<=hi){ toast('La hora de fin debe ser posterior a la de inicio.'); return; }
+        const matId = body.querySelector('#hMat').value;
         const choque = DB.horarios.find(h=>h.grupoId===horGrupo && h.dia===dia && hi<h.hf && hf>h.hi);
         if(choque){ toast(`Choque de horario con ${materia(choque.materiaId)?.nombre} (${choque.hi}–${choque.hf}).`); return; }
-        const nh = {id:uid(), materiaId:body.querySelector('#hMat').value, grupoId:horGrupo,
+        // Choque del docente: ya tiene clase a esa hora en otro grupo
+        const docId = materia(matId)?.docenteId;
+        if(docId){
+          const choqueDoc = DB.horarios.find(h=>h.dia===dia && hi<h.hf && hf>h.hi && materia(h.materiaId)?.docenteId===docId);
+          if(choqueDoc){ const gc=grupo(choqueDoc.grupoId);
+            if(!confirm(`Atención: ${docente(docId)?.nombre||'el docente'} ya tiene clase ${dia} ${choqueDoc.hi}–${choqueDoc.hf} con el grupo ${gc?.nombre||''}. ¿Agregar de todas formas?`)) return; }
+        }
+        const nh = {id:uid(), materiaId:matId, grupoId:horGrupo,
           dia, hi, hf, aula:body.querySelector('#hAula').value.trim()||'—'};
         DB.horarios.push(nh);
         persist('horarios', nh);
@@ -966,6 +1111,197 @@ function vistaHorarios(el){
     }));
   };
   pintar();
+}
+
+/* ───────────────────────── 10B. CONSTRUCTOR AUTOMÁTICO DE HORARIOS ─────────────────────────
+   Turno vespertino: 15:00 a 20:15, lunes a viernes.
+   Bloques de 50 min separados por descanso a media tarde.
+   Reparte las sesiones de cada materia del grupo en días distintos,
+   priorizando "Cultura Digital" para que caiga en 2 o 3 días. */
+
+/* Genera los bloques horarios del turno a partir de hora inicio/fin y duración */
+function generarBloques(hInicio, hFin, durMin, recesoTrasBloque, recesoMin){
+  const aMin = h => { const [H,M]=h.split(':').map(Number); return H*60+M; };
+  const aHHMM = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+  const bloques = []; let t = aMin(hInicio); const fin = aMin(hFin); let n = 0;
+  while(t + durMin <= fin){
+    bloques.push({hi:aHHMM(t), hf:aHHMM(t+durMin)});
+    t += durMin; n++;
+    if(recesoTrasBloque && n===recesoTrasBloque){ t += recesoMin; }
+  }
+  return bloques;
+}
+
+function modalArmarHorario(){
+  const g = grupo(horGrupo);
+  if(!g){ toast('Selecciona un grupo primero.'); return; }
+  // Materias del grupo: las del mismo semestre del grupo, o todas si no coincide ninguna
+  const materiasSem = DB.materias.filter(m=>m.semestre===g.semestre);
+  const materiasUsar = materiasSem.length ? materiasSem : DB.materias;
+
+  abrirModal('🪄 Armar horario automático', `
+    <p class="muted">El sistema acomodará las materias del <strong>${esc(g.nombre)}</strong> en la malla oficial de la Prepa 50 (3:00–8:15 PM, receso 5:40–6:15), sin choques. Las sesiones de cada materia se reparten en días distintos; Cultura Digital se prioriza en 2–3 días.</p>
+    <div class="form-grid" style="margin-top:.6rem">
+      <div class="field full"><label>Aula por defecto</label><input id="haAula" value="Aula ${esc(g.nombre.replace(/[^\w]/g,''))}"></div>
+    </div>
+    <div id="haPreview" style="margin-top:.8rem"></div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="haCan">Cancelar</button>
+      <button class="btn btn-gold" id="haVista">👁 Previsualizar</button>
+      <button class="btn btn-primary" id="haOk" disabled>Aplicar horario</button>
+    </div>`,
+  body=>{
+    let propuesta = [];
+    body.querySelector('#haCan').addEventListener('click', cerrarModal);
+
+    const previsualizar = ()=>{
+      const aula = body.querySelector('#haAula').value.trim()||'—';
+      // Solo bloques de clase (excluye el receso)
+      const bloques = BLOQUES_P50.filter(b=>!b.receso);
+
+      const conConfig = materiasUsar.filter(m=>(m.sesionesSemana||0)>0);
+      if(!conConfig.length){
+        body.querySelector('#haPreview').innerHTML = `<p class="tag tag-aviso">Ninguna materia de este semestre tiene «Sesiones por semana» configuradas. Edita las materias y define cuántas sesiones lleva cada una.</p>`;
+        body.querySelector('#haOk').disabled = true; return;
+      }
+      const esCultura = m => /cultura\s*digital/i.test(m.nombre);
+      const orden = [...conConfig].sort((a,b)=>{
+        if(esCultura(a)!==esCultura(b)) return esCultura(a)?-1:1;
+        return (b.sesionesSemana||0)-(a.sesionesSemana||0);
+      });
+
+      const ocupado = DIAS.map(()=>bloques.map(()=>null));
+      DB.horarios.filter(h=>h.grupoId===horGrupo).forEach(h=>{
+        const di = DIAS.indexOf(h.dia);
+        bloques.forEach((b,bi)=>{ if(di>=0 && h.hi<b.hf && h.hf>b.hi) ocupado[di][bi]='previo'; });
+      });
+
+      propuesta = [];
+      const sinLugar = [];
+      orden.forEach(m=>{
+        const ses = m.sesionesSemana||1;
+        const diasUsados = [];
+        for(let s=0; s<ses; s++){
+          const candidatos = DIAS.map((d,di)=>({di, carga:ocupado[di].filter(x=>x).length, repetido:diasUsados.includes(di)}))
+            .filter(c=>c.carga<bloques.length)
+            .sort((a,b)=> (a.repetido-b.repetido) || (a.carga-b.carga));
+          if(!candidatos.length){ sinLugar.push(m.nombre); continue; }
+          const di = candidatos[0].di;
+          const bi = ocupado[di].findIndex(x=>!x);
+          if(bi<0){ sinLugar.push(m.nombre); continue; }
+          ocupado[di][bi] = m.id;
+          diasUsados.push(di);
+          propuesta.push({materiaId:m.id, grupoId:horGrupo, dia:DIAS[di], hi:bloques[bi].hi, hf:bloques[bi].hf, aula});
+        }
+      });
+
+      // Render con todas las franjas, incluyendo el receso
+      let html = `<div class="table-wrap"><table class="horario-tabla"><thead><tr><th>Hora</th>${DIAS.map(d=>`<th>${d.slice(0,3)}</th>`).join('')}</tr></thead><tbody>`;
+      BLOQUES_P50.forEach(franja=>{
+        if(franja.receso){
+          html += `<tr><td class="mono">${franja.hi}</td><td colspan="${DIAS.length}" style="text-align:center;background:#FBF1D9;color:var(--oro-500);font-weight:700">☕ RECESO</td></tr>`;
+          return;
+        }
+        const bi = bloques.findIndex(b=>b.hi===franja.hi);
+        html += `<tr><td class="mono">${franja.hi}–${franja.hf}</td>`;
+        DIAS.forEach((d,di)=>{
+          const cell = ocupado[di][bi];
+          if(cell && cell!=='previo'){ const m=materia(cell);
+            html += `<td><div class="bloque-clase" style="${/cultura\s*digital/i.test(m?.nombre||'')?'border-left-color:var(--oro-500);background:#FBF1D9':''}"><strong>${esc(m?.clave||'')}</strong><span>${esc(m?.nombre||'')}</span></div></td>`;
+          } else if(cell==='previo'){ html += `<td><span class="muted" style="font-size:.7rem">ocupado</span></td>`; }
+          else html += '<td></td>';
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+      if(sinLugar.length) html += `<p class="tag tag-aviso" style="margin-top:.5rem">No cupieron todas las sesiones de: ${esc([...new Set(sinLugar)].join(', '))}. El turno tiene 7 clases por día (35 a la semana); reduce sesiones o reparte en otro grupo.</p>`;
+      const culturaDias = [...new Set(propuesta.filter(p=>/cultura\s*digital/i.test(materia(p.materiaId)?.nombre||'')).map(p=>p.dia))];
+      if(culturaDias.length) html += `<p class="tag tag-ok" style="margin-top:.5rem">✓ Cultura Digital quedó repartida en ${culturaDias.length} día(s): ${esc(culturaDias.join(', '))}</p>`;
+      body.querySelector('#haPreview').innerHTML = html;
+      body.querySelector('#haOk').disabled = !propuesta.length;
+    };
+
+    body.querySelector('#haVista').addEventListener('click', previsualizar);
+    body.querySelector('#haOk').addEventListener('click', ()=>{
+      if(!propuesta.length) return;
+      if(!confirm(`Se agregarán ${propuesta.length} clases al horario de ${g.nombre}. ¿Continuar?`)) return;
+      const nuevos = propuesta.map(p=>({id:uid(), ...p}));
+      nuevos.forEach(n=>DB.horarios.push(n));
+      persist('horarios', nuevos);
+      cerrarModal(); render(); toast(`Horario armado: ${nuevos.length} clases agregadas.`);
+    });
+  });
+}
+
+/* Horario semanal personal del docente: todas sus materias y grupos juntos */
+function modalMiHorario(){
+  const misMat = misMaterias().map(m=>m.id);
+  const clases = DB.horarios.filter(h=>misMat.includes(h.materiaId));
+  if(!clases.length){ toast('Aún no tienes clases asignadas en ningún horario.'); return; }
+  const horas = [...new Set(clases.map(c=>c.hi))].sort();
+  let html = `<p class="muted">Tu carga semanal completa, con todos tus grupos.</p>
+    <div class="table-wrap" style="margin-top:.6rem"><table class="horario-tabla"><thead><tr><th>Hora</th>${DIAS.map(d=>`<th>${d.slice(0,3)}</th>`).join('')}</tr></thead><tbody>`;
+  horas.forEach(h=>{
+    html += `<tr><td class="mono"><strong>${h}</strong></td>`;
+    DIAS.forEach(d=>{
+      const c = clases.filter(x=>x.dia===d && x.hi===h);
+      html += `<td>${c.map(x=>`<div class="bloque-clase"><strong>${esc(materia(x.materiaId)?.nombre||'')}</strong><span>${esc(grupo(x.grupoId)?.nombre||'')} · ${esc(x.aula)}</span></div>`).join('')}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div><div class="modal-foot"><button class="btn btn-primary" id="mhCerrar">Cerrar</button></div>';
+  abrirModal('📅 Mi horario semanal', html, body=>{
+    body.querySelector('#mhCerrar').addEventListener('click', cerrarModal);
+  });
+}
+
+/* Exporta el horario a PDF. Si grupoId es null, exporta el horario personal del docente */
+function exportarHorarioPDF(grupoId){
+  if(!hayPDF()) return;
+  let clases, titulo, subtit;
+  if(grupoId){
+    clases = DB.horarios.filter(h=>h.grupoId===grupoId);
+    const g = grupo(grupoId);
+    titulo = 'HORARIO DE CLASES';
+    subtit = `${g?.nombre||''} · ${g?.turno||''} · Semestre ${g?.semestre||''}`;
+  } else {
+    const misMat = misMaterias().map(m=>m.id);
+    clases = DB.horarios.filter(h=>misMat.includes(h.materiaId));
+    titulo = 'HORARIO DEL DOCENTE';
+    subtit = autorActual()==='local' ? 'Carga semanal' : autorActual();
+  }
+  if(!clases.length){ toast('No hay clases que exportar.'); return; }
+
+  const doc = new window.jspdf.jsPDF({orientation:'landscape'});
+  encabezadoPDF(doc, titulo);
+  doc.setTextColor(22,35,58); doc.setFont('helvetica','bold'); doc.setFontSize(11);
+  doc.text(subtit, 14, 38);
+
+  const horas = [...new Set(clases.map(c=>c.hi))].sort();
+  const cuerpo = horas.map(h=>{
+    const fila = [h];
+    DIAS.forEach(d=>{
+      const c = clases.filter(x=>x.dia===d && x.hi===h);
+      fila.push(c.map(x=>{
+        const m = materia(x.materiaId);
+        const extra = grupoId ? (m?.nombre||'') : `${m?.nombre||''}\n${grupo(x.grupoId)?.nombre||''}`;
+        return `${extra}\n${x.aula||''}`;
+      }).join('\n'));
+    });
+    return fila;
+  });
+  doc.autoTable({
+    startY:44,
+    head:[['Hora', ...DIAS]],
+    body: cuerpo,
+    styles:{fontSize:8, cellPadding:2.5, valign:'middle', halign:'center'},
+    headStyles:{fillColor:[29,78,158], textColor:255, fontStyle:'bold', halign:'center'},
+    columnStyles:{0:{fontStyle:'bold', fillColor:[227,235,247], halign:'center'}},
+    alternateRowStyles:{fillColor:[248,250,253]},
+  });
+  piePDF(doc);
+  doc.save(`horario_${(subtit||'').replace(/[^\w]/g,'_')}.pdf`);
+  toast('Horario exportado a PDF.');
 }
 
 /* ───────────────────────── 11. CREDENCIALES QR ───────────────────────── */
