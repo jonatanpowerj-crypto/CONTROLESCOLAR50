@@ -672,6 +672,9 @@ function vistaDocentes(el){
   <div class="toolbar">
     <input class="search" id="busDoc" placeholder="Buscar docente…">
     <div class="spacer"></div>
+    <button class="btn btn-gold" id="solicitudesNube">☁️ Solicitudes en línea</button>
+    <button class="btn btn-outline" id="impRegistro">📥 Importar archivo</button>
+    <input type="file" id="fileRegistro" accept=".json" hidden>
     <button class="btn btn-primary" id="nuevoDoc">＋ Registrar docente</button>
   </div>
   <div id="listaDoc"></div>`;
@@ -702,8 +705,130 @@ function vistaDocentes(el){
   };
   $('#busDoc').addEventListener('input', pintar);
   $('#nuevoDoc').addEventListener('click', ()=>formDocente(null));
+  $('#impRegistro').addEventListener('click', ()=>$('#fileRegistro').click());
+  $('#solicitudesNube').addEventListener('click', ()=>modalSolicitudesNube());
+  $('#fileRegistro').addEventListener('change', e=>{
+    const f = e.target.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = ()=>{ try{ importarRegistroDocente(JSON.parse(r.result)); }
+      catch(_){ toast('El archivo no es un registro válido.'); } };
+    r.readAsText(f); e.target.value='';
+  });
   pintar();
 }
+/* Lee la bandeja de registros en línea (colección registros_docentes) */
+function modalSolicitudesNube(){
+  if(typeof MODO==='undefined' || MODO!=='nube' || typeof fsdb==='undefined' || !fsdb){
+    toast('Las solicitudes en línea requieren el modo nube activo.'); return;
+  }
+  abrirModal('☁️ Solicitudes de registro en línea', '<p class="muted">Cargando solicitudes…</p>', body=>{
+    fsdb.collection('registros_docentes').get().then(snap=>{
+      const regs = snap.docs.map(d=>d.data()).sort((a,b)=>(b.actualizado||'').localeCompare(a.actualizado||''));
+      if(!regs.length){ body.innerHTML = '<div class="vacio"><span class="icono">📭</span>No hay solicitudes en línea por ahora. Cuando un docente guarde su registro desde la app, aparecerá aquí.</div>'; return; }
+      body.innerHTML = `<p class="muted">${regs.length} solicitud(es) recibida(s). Revisa cada una y pulsa «Incorporar» para registrar al docente y sus materias.</p>
+        <div id="solLista" style="margin-top:.6rem"></div>`;
+      const pintar = ()=>{
+        body.querySelector('#solLista').innerHTML = regs.map((r,idx)=>{
+          const totalHoras = (r.materias||[]).reduce((a,m)=>a+(+m.horasSemana||0),0);
+          return `<div class="config-card" data-idx="${idx}">
+            <div style="display:flex;justify-content:space-between;gap:.5rem;align-items:start">
+              <div><h4>${esc(r.docente?.nombre||'(sin nombre)')}</h4>
+                <span class="clave">${esc(r.docente?.email||'')} · ${(r.materias||[]).length} materia(s) · ${totalHoras} h/sem</span></div>
+              <span class="tag ${r.estado==='incorporado'?'tag-ok':'tag-aviso'}">${r.estado==='incorporado'?'Incorporado':'Pendiente'}</span>
+            </div>
+            <div style="margin-top:.5rem">${(r.materias||[]).map(m=>`<span class="tag tag-info" style="margin:.1rem">${esc(m.clave)} · ${esc(m.nombre)}${m.grupos?' ('+esc(m.grupos)+')':''}</span>`).join(' ')}</div>
+            <div style="display:flex;gap:.4rem;margin-top:.6rem">
+              <button class="btn btn-sm btn-primary" data-inc="${idx}">✓ Incorporar al sistema</button>
+              <button class="btn btn-sm btn-danger" data-del="${idx}">🗑 Descartar</button>
+            </div>
+          </div>`;
+        }).join('');
+        body.querySelectorAll('[data-inc]').forEach(b=>b.addEventListener('click',()=>{
+          const r = regs[+b.dataset.inc];
+          aplicarRegistro(r);
+          // marcar como incorporado en la nube
+          fsdb.collection('registros_docentes').doc(r.id).set({...r, estado:'incorporado'}).catch(()=>{});
+          r.estado='incorporado'; pintar();
+          toast(`Incorporado: ${r.docente?.nombre}`);
+        }));
+        body.querySelectorAll('[data-del]').forEach(b=>b.addEventListener('click',()=>{
+          const r = regs[+b.dataset.del];
+          if(!confirm(`¿Descartar la solicitud de ${r.docente?.nombre}? Esto no elimina nada del sistema, solo quita la solicitud de la bandeja.`)) return;
+          fsdb.collection('registros_docentes').doc(r.id).delete().catch(()=>{});
+          regs.splice(+b.dataset.del,1); pintar();
+          toast('Solicitud descartada.');
+        }));
+      };
+      pintar();
+    }).catch(e=>{ console.error(e); body.innerHTML='<p class="tag tag-mal">No se pudieron leer las solicitudes. Revisa las reglas de Firestore.</p>'; });
+  });
+}
+
+/* Aplica un registro (de archivo o de la nube) al sistema: docente + materias */
+function aplicarRegistro(data){
+  if(!data || !data.docente || !Array.isArray(data.materias)) return;
+  const d = data.docente;
+  let doc = DB.docentes.find(x=>(x.email||'').toLowerCase()===(d.email||'').toLowerCase() && d.email);
+  if(!doc){ doc = {id:uid(), nombre:d.nombre, email:d.email||'', telefono:d.telefono||'', especialidad:d.especialidad||''};
+    DB.docentes.push(doc); persist('docentes', doc); }
+  const cambios = [];
+  data.materias.forEach(m=>{
+    let mat = DB.materias.find(x=>x.clave===m.clave);
+    const rubros = (m.rubros&&m.rubros.length)?m.rubros:[{nombre:'Examen',peso:40},{nombre:'Trabajos',peso:35},{nombre:'Participación',peso:25}];
+    if(mat){ mat.docenteId=doc.id; if(m.horasSemana)mat.horasSemana=m.horasSemana; if(m.sesionesSemana)mat.sesionesSemana=m.sesionesSemana; cambios.push(mat); }
+    else { mat={id:uid(), clave:m.clave, nombre:m.nombre, semestre:m.semestre,
+      horasSemana:m.horasSemana||0, sesionesSemana:m.sesionesSemana||0, docenteId:doc.id, rubros};
+      DB.materias.push(mat); cambios.push(mat); }
+  });
+  persist('materias', cambios);
+  render();
+}
+
+/* Importa el archivo generado por la app externa de registro de docentes */
+function importarRegistroDocente(data){
+  if(!data || !data.docente || !Array.isArray(data.materias)){ toast('El archivo no tiene el formato esperado.'); return; }
+  const d = data.docente;
+  const previa = data.materias.map(m=>{
+    const existe = DB.materias.some(x=>x.clave===m.clave);
+    return `<tr><td class="mono">${esc(m.clave)}</td><td>${esc(m.nombre)}</td>
+      <td style="text-align:center">${m.semestre}</td><td style="text-align:center">${esc(m.grupos||'—')}</td>
+      <td style="text-align:center">${m.sesionesSemana||0}</td>
+      <td>${existe?'<span class="tag tag-aviso">Ya existe</span>':'<span class="tag tag-ok">Nueva</span>'}</td></tr>`;
+  }).join('');
+
+  abrirModal('📥 Importar registro de docente', `
+    <p><strong>${esc(d.nombre)}</strong> · ${esc(d.email||'sin correo')}</p>
+    <p class="muted">Especialidad: ${esc(d.especialidad||'—')} · Tel: ${esc(d.telefono||'—')}</p>
+    <p class="muted" style="margin:.6rem 0">Se registrará al docente (si no existe) y se crearán sus materias. Las materias que ya existen se vincularán a este docente.</p>
+    <div class="table-wrap" style="max-height:300px;overflow-y:auto"><table>
+      <thead><tr><th>Clave</th><th>Materia</th><th>Sem.</th><th>Grupo</th><th>Ses.</th><th>Estado</th></tr></thead>
+      <tbody>${previa}</tbody></table></div>
+    <div class="modal-foot"><button class="btn btn-outline" id="riCan">Cancelar</button>
+    <button class="btn btn-primary" id="riOk">Importar ${data.materias.length} materia(s)</button></div>`,
+  body=>{
+    body.querySelector('#riCan').addEventListener('click', cerrarModal);
+    body.querySelector('#riOk').addEventListener('click', ()=>{
+      // 1) Docente: buscar por correo o crear
+      let doc = DB.docentes.find(x=>(x.email||'').toLowerCase()===(d.email||'').toLowerCase() && d.email);
+      if(!doc){ doc = {id:uid(), nombre:d.nombre, email:d.email||'', telefono:d.telefono||'', especialidad:d.especialidad||''};
+        DB.docentes.push(doc); persist('docentes', doc); }
+      // 2) Materias: crear nuevas o vincular existentes
+      const cambios = [];
+      data.materias.forEach(m=>{
+        let mat = DB.materias.find(x=>x.clave===m.clave);
+        const rubros = (m.rubros&&m.rubros.length)?m.rubros:[{nombre:'Examen',peso:40},{nombre:'Trabajos',peso:35},{nombre:'Participación',peso:25}];
+        if(mat){ mat.docenteId=doc.id; if(m.horasSemana)mat.horasSemana=m.horasSemana; if(m.sesionesSemana)mat.sesionesSemana=m.sesionesSemana; cambios.push(mat); }
+        else { mat={id:uid(), clave:m.clave, nombre:m.nombre, semestre:m.semestre,
+          horasSemana:m.horasSemana||0, sesionesSemana:m.sesionesSemana||0, docenteId:doc.id, rubros};
+          DB.materias.push(mat); cambios.push(mat); }
+      });
+      persist('materias', cambios);
+      cerrarModal(); render();
+      toast(`Importado: ${d.nombre} con ${data.materias.length} materia(s).`);
+    });
+  });
+}
+
 function formDocente(id){
   const d = id ? docente(id) : {nombre:'',email:'',telefono:'',especialidad:''};
   abrirModal(id?'Editar docente':'Registrar docente', `
