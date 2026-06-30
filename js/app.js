@@ -151,48 +151,40 @@ function semilla(){
 }
 
 /* ── Ciclo escolar UAGro: Agosto–Enero = A (impar) · Febrero–Julio = B (par) ── */
-function cicloActualUAGro(fecha = new Date()){
-  const mes = fecha.getMonth()+1; // 1-12
-  const anio = fecha.getFullYear();
-  // Agosto(8) a Diciembre(12): ciclo A que termina en enero del año siguiente
+/* ── Ciclo escolar UAGro ──────────────────────────────────────────────
+   Semestre impar (A): agosto-enero   (ej. 2026-A: ago2026 – ene2027)
+   Semestre par   (B): febrero-julio  (ej. 2026-B: feb2026 – jul2026)
+   El "año" del ciclo es el año en que INICIA el período.
+   ─────────────────────────────────────────────────────────────────── */
+function cicloActualAuto(fecha = new Date()){
+  const mes = fecha.getMonth()+1, anio = fecha.getFullYear();
   if(mes>=8) return `${anio}-A`;
-  // Enero(1): aún es la cola del ciclo A iniciado el agosto anterior
   if(mes===1) return `${anio-1}-A`;
-  // Febrero(2) a Julio(7): ciclo B del mismo año
   return `${anio}-B`;
 }
 function siguienteCiclo(ciclo){
   const m = /^(\d{4})-([AB])$/.exec(ciclo||'');
-  if(!m) return cicloActualUAGro();
+  if(!m) return cicloActualAuto();
   const [,anio,letra] = m;
   return letra==='A' ? `${anio}-B` : `${+anio+1}-A`;
 }
-
-/* ── Ciclo escolar UAGro: semestre impar (A) ago-ene, semestre par (B) feb-jul ── */
-function cicloActualAuto(){
-  const h = new Date(); const mes = h.getMonth()+1; // 1-12
-  const anioBase = mes>=8 ? h.getFullYear() : h.getFullYear()-1;
-  const letra = mes>=8 || mes<=1 ? 'A' : 'B';
-  return `${anioBase}-${letra}`;
-}
-function siguienteCiclo(ciclo){
+function etiquetaCiclo(ciclo){
   const m = /^(\d{4})-([AB])$/.exec(ciclo||'');
-  if(!m) return cicloActualAuto();
-  const anio = +m[1];
-  return m[2]==='A' ? `${anio}-B` : `${anio+1}-A`;
+  if(!m) return ciclo||'Sin ciclo';
+  const [,anio,letra] = m;
+  return letra==='A' ? `${anio}-A (ago ${anio} – ene ${+anio+1})` : `${anio}-B (feb ${anio} – jul ${anio})`;
 }
-function listaCiclos(n=6){
-  // Genera n ciclos hacia atrás y adelante del actual, para selectores
-  const out = []; let c = cicloActualAuto();
-  const m = /^(\d{4})-([AB])$/.exec(c); let anio=+m[1], letra=m[2];
-  for(let i=-2;i<n-2;i++){
-    let a=anio, l=letra;
-    let pasos=i;
-    while(pasos>0){ if(l==='A'){l='B';} else {l='A'; a++;} pasos--; }
-    while(pasos<0){ if(l==='B'){l='A';} else {l='B'; a--;} pasos++; }
-    out.push(`${a}-${l}`);
+function listaCiclos(n=8){
+  const actual = cicloActualAuto();
+  const parse = c=>{ const m=/^(\d{4})-([AB])$/.exec(c); return m?[+m[1],m[2]]:null; };
+  const out = new Set(); const [a0,l0] = parse(actual)||[new Date().getFullYear(),'A'];
+  for(let i=-(n>>1);i<=(n>>1);i++){
+    let a=a0, l=l0, p=i;
+    while(p>0){ l=l==='A'?'B':'A'; if(l==='A') a++; p--; }
+    while(p<0){ if(l==='A') a--; l=l==='B'?'A':'B'; p++; }
+    out.add(`${a}-${l}`);
   }
-  return [...new Set(out)];
+  return [...out].sort();
 }
 
 function estructuraVacia(){
@@ -271,6 +263,8 @@ const TITULOS = {
   materias:['Materias y rubros','Unidades de aprendizaje y criterios de evaluación'],
   grupos:['Grupos y alumnos','Matrícula por grupo'],
   horarios:['Horarios','Carga horaria semanal'],
+  vistaplantel:['Vista general del plantel','Horario completo de todos los grupos y semestres'],
+  auditor:['Auditor de horarios','Detección de duplicados, choques y conflictos'],
   calendario:['Calendario escolar','Parciales, periodos y eventos del ciclo'],
   credenciales:['Credenciales QR','Gafetes imprimibles con código de asistencia'],
   consultas:['Portal alumnos y padres','Consulta de avance por matrícula'],
@@ -2692,11 +2686,215 @@ function formCalendario(id){
   });
 }
 
-/* ───────────────────────── 21. ARRANQUE ───────────────────────── */
+/* ═══════════════════════════════════════════════════════════════════════
+   22. VISTA GENERAL DEL PLANTEL
+   Muestra el horario de TODOS los grupos por ciclo en una sola pantalla.
+   Filtros: ciclo, semestre, docente. Exporta a PDF horizontal.
+   ═══════════════════════════════════════════════════════════════════════ */
+function vistaVistaPlantel(el){
+  const cicloActivo = DB.plantel.ciclo||cicloActualAuto();
+  const ciclosDisp = [...new Set(DB.grupos.map(g=>g.ciclo).filter(Boolean))];
+  if(!ciclosDisp.length) ciclosDisp.push(cicloActivo);
+
+  el.innerHTML = `
+  <div class="card">
+    <div class="toolbar" style="flex-wrap:wrap;gap:.5rem">
+      <div class="field"><label>Ciclo</label>
+        <select id="vpCiclo">${ciclosDisp.map(c=>`<option ${c===cicloActivo?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="field"><label>Filtrar por semestre</label>
+        <select id="vpSem"><option value="">Todos</option>${[1,2,3,4,5,6].map(s=>`<option value="${s}">${s}° semestre</option>`).join('')}</select></div>
+      <div class="field"><label>Filtrar por docente</label>
+        <select id="vpDoc"><option value="">Todos</option>${DB.docentes.map(d=>`<option value="${d.id}">${esc(d.nombre)}</option>`).join('')}</select></div>
+      <div class="spacer"></div>
+      <button class="btn btn-outline" id="vpPDF">🧾 Exportar PDF</button>
+    </div>
+  </div>
+  <div id="vpZona" style="margin-top:.8rem"></div>`;
+
+  const pintar = ()=>{
+    const ciclo = $('#vpCiclo').value;
+    const semFiltro = +$('#vpSem').value||0;
+    const docFiltro = $('#vpDoc').value;
+    let grupos = DB.grupos.filter(g=>g.ciclo===ciclo||(ciclo===cicloActivo&&!g.ciclo));
+    if(semFiltro) grupos = grupos.filter(g=>g.semestre===semFiltro);
+    grupos = grupos.sort((a,b)=>a.semestre-b.semestre||a.nombre.localeCompare(b.nombre));
+    if(!grupos.length){ $('#vpZona').innerHTML='<div class="vacio card"><span class="icono">🗓️</span>No hay grupos registrados para este ciclo. Crea grupos y asígnales el ciclo correcto.</div>'; return; }
+    const bloques = BLOQUES_P50;
+
+    let html = '';
+    grupos.forEach(g=>{
+      let clases = DB.horarios.filter(h=>h.grupoId===g.id);
+      if(docFiltro) clases = clases.filter(h=>materia(h.materiaId)?.docenteId===docFiltro);
+      html += `<div class="card" style="margin-bottom:1rem;overflow-x:auto">
+        <h3 style="margin-bottom:.5rem">${esc(g.nombre)} <span class="muted" style="font-size:.8rem">· ${g.semestre}° sem. · ${esc(g.turno||'')} · Ciclo ${esc(g.ciclo||cicloActivo)}</span>
+          <span class="tag tag-info">${clases.length} clase(s)</span></h3>
+        <table class="horario-tabla" style="min-width:600px"><thead><tr>
+          <th style="width:90px">Hora</th>${DIAS.map(d=>`<th>${d}</th>`).join('')}</tr></thead><tbody>`;
+      bloques.forEach(b=>{
+        if(b.receso){
+          html += `<tr><td class="mono">${b.hi}</td><td colspan="5" style="text-align:center;background:#FBF1D9;color:var(--oro-500);font-weight:700;font-size:.78rem">☕ RECESO</td></tr>`;
+          return;
+        }
+        html += `<tr><td class="mono" style="font-size:.75rem;white-space:nowrap">${b.hi}<br>${b.hf}</td>`;
+        DIAS.forEach(d=>{
+          const c = clases.filter(h=>h.dia===d && h.hi===b.hi);
+          html += `<td style="padding:.2rem">${c.map(h=>{
+            const m=materia(h.materiaId), doc=docente(m?.docenteId);
+            const esCd=/cultura\s*digital/i.test(m?.nombre||'');
+            return `<div class="bloque-clase" style="${esCd?'border-left-color:var(--oro-500);background:#FBF1D9':''}">
+              <strong style="font-size:.72rem">${esc(m?.nombre||'—')}</strong>
+              <span style="font-size:.65rem">${esc(h.aula||'')}${doc?' · '+esc(doc.nombre.split(' ').slice(-1)[0]):''}</span>
+            </div>`;
+          }).join('')}</td>`;
+        });
+        html += '</tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    $('#vpZona').innerHTML = html;
+  };
+
+  ['vpCiclo','vpSem','vpDoc'].forEach(id=>$('#'+id).addEventListener('change', pintar));
+  $('#vpPDF').addEventListener('click', ()=>exportarPlantelPDF($('#vpCiclo').value));
+  pintar();
+}
+
+function exportarPlantelPDF(ciclo){
+  if(!hayPDF()) return;
+  const grupos = DB.grupos.filter(g=>g.ciclo===ciclo||(ciclo===DB.plantel.ciclo&&!g.ciclo))
+    .sort((a,b)=>a.semestre-b.semestre||a.nombre.localeCompare(b.nombre));
+  if(!grupos.length){ toast('No hay grupos para exportar en este ciclo.'); return; }
+  const doc = new window.jspdf.jsPDF({orientation:'landscape'});
+  grupos.forEach((g,gi)=>{
+    if(gi>0) doc.addPage();
+    encabezadoPDF(doc, `HORARIO GENERAL · ${g.nombre}`);
+    doc.setFontSize(10); doc.setTextColor(22,35,58);
+    doc.text(`${g.nombre} · ${g.semestre}° semestre · ${g.turno||''} · Ciclo ${g.ciclo||ciclo}`, 14, 38);
+    const bloques = BLOQUES_P50.filter(b=>!b.receso);
+    const clases = DB.horarios.filter(h=>h.grupoId===g.id);
+    const cuerpo = bloques.map(b=>{
+      const fila = [`${b.hi}\n${b.hf}`];
+      DIAS.forEach(d=>{
+        const c = clases.filter(h=>h.dia===d&&h.hi===b.hi);
+        fila.push(c.map(h=>{ const m=materia(h.materiaId),dc=docente(m?.docenteId);
+          return `${m?.nombre||'—'}\n${dc?.nombre||''}\n${h.aula||''}`; }).join('\n'));
+      });
+      return fila;
+    });
+    doc.autoTable({ startY:44, head:[['Hora',...DIAS]], body:cuerpo,
+      styles:{fontSize:7,cellPadding:2,valign:'middle'},
+      headStyles:{fillColor:[29,78,158],textColor:255,fontStyle:'bold',halign:'center'},
+      columnStyles:{0:{fontStyle:'bold',fillColor:[227,235,247],halign:'center'}},
+    });
+  });
+  piePDF(doc);
+  doc.save(`horario_plantel_${ciclo||'completo'}.pdf`);
+  toast(`PDF del plantel generado: ${grupos.length} grupo(s).`);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   23. AUDITOR DE HORARIOS
+   Detecta en tiempo real: choques de docente entre grupos, materias
+   asignadas múltiples veces en el mismo bloque, grupos sin horario,
+   materias con sesiones configuradas pero sin clase asignada,
+   y docentes con carga excesiva o cero horas.
+   ═══════════════════════════════════════════════════════════════════════ */
+function vistaAuditor(el){
+  el.innerHTML = `
+  <div class="card">
+    <div class="toolbar">
+      <div class="field"><label>Ciclo a auditar</label>
+        <select id="auCiclo">${listaCiclos().map(c=>`<option ${c===(DB.plantel.ciclo||cicloActualAuto())?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="spacer"></div>
+      <button class="btn btn-primary" id="auAuditar">🔍 Ejecutar auditoría</button>
+    </div>
+  </div>
+  <div id="auResultados" style="margin-top:.9rem"></div>`;
+
+  const auditar = ()=>{
+    const ciclo = $('#auCiclo').value;
+    const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
+    const todosHorarios = DB.horarios;
+    const problemas = [], avisos = [], info = [];
+
+    // ── 1. Choques de docente entre grupos ──
+    const mapaDocDia = {}; // docenteId|dia|hi → [grupoId, materiaId]
+    grupos.forEach(g=>{
+      const clases = todosHorarios.filter(h=>h.grupoId===g.id);
+      clases.forEach(h=>{
+        const did = materia(h.materiaId)?.docenteId; if(!did) return;
+        const clave = `${did}|${h.dia}|${h.hi}`;
+        if(!mapaDocDia[clave]) mapaDocDia[clave]=[];
+        mapaDocDia[clave].push({grupoId:g.id, grupoNom:g.nombre, matNom:materia(h.materiaId)?.nombre||'?'});
+      });
+    });
+    Object.entries(mapaDocDia).forEach(([clave,lst])=>{
+      if(lst.length<2) return;
+      const [did,dia,hi] = clave.split('|');
+      const docNom = docente(did)?.nombre||did;
+      problemas.push(`🔴 <strong>Choque de docente:</strong> ${esc(docNom)} tiene ${lst.length} clases el <em>${esc(dia)} ${esc(hi)}</em> en los grupos ${lst.map(x=>`${esc(x.grupoNom)} (${esc(x.matNom)})`).join(', ')}.`);
+    });
+
+    // ── 2. Grupos sin ninguna clase ──
+    grupos.forEach(g=>{
+      const n = todosHorarios.filter(h=>h.grupoId===g.id).length;
+      if(n===0) avisos.push(`🟡 <strong>Sin horario:</strong> El grupo <strong>${esc(g.nombre)}</strong> (${g.semestre}° sem.) no tiene ninguna clase asignada.`);
+    });
+
+    // ── 3. Materias con sesiones configuradas pero sin clase en algún grupo ──
+    grupos.forEach(g=>{
+      const mats = DB.materias.filter(m=>m.semestre===g.semestre&&(m.sesionesSemana||0)>0);
+      mats.forEach(m=>{
+        const asig = todosHorarios.filter(h=>h.grupoId===g.id&&h.materiaId===m.id).length;
+        const faltan = m.sesionesSemana - asig;
+        if(faltan>0) avisos.push(`🟡 <strong>Sesiones faltantes:</strong> ${esc(m.nombre)} en ${esc(g.nombre)}: configuradas ${m.sesionesSemana}, asignadas ${asig} (faltan <strong>${faltan}</strong>).`);
+        if(asig>m.sesionesSemana) problemas.push(`🟠 <strong>Sesiones excedidas:</strong> ${esc(m.nombre)} en ${esc(g.nombre)}: configuradas ${m.sesionesSemana}, asignadas ${asig} (${asig-m.sesionesSemana} de más).`);
+      });
+    });
+
+    // ── 4. Docentes con carga horaria ──
+    const cargaDoc = {};
+    grupos.forEach(g=>{ todosHorarios.filter(h=>h.grupoId===g.id).forEach(h=>{
+      const did=materia(h.materiaId)?.docenteId; if(!did) return;
+      cargaDoc[did]=(cargaDoc[did]||0)+1;
+    });});
+    DB.docentes.forEach(d=>{
+      const h = cargaDoc[d.id]||0;
+      if(h===0) avisos.push(`🟡 <strong>Docente sin horas:</strong> ${esc(d.nombre)} no tiene ninguna clase en el horario de este ciclo.`);
+      else if(h>35) problemas.push(`🟠 <strong>Sobrecarga:</strong> ${esc(d.nombre)} tiene ${h} horas asignadas (máx. recomendado: 35/sem). Revisa su distribución.`);
+      else info.push(`✅ ${esc(d.nombre)}: <strong>${h}</strong> hora(s) semanales.`);
+    });
+
+    // ── 5. Materias sin docente asignado en el horario ──
+    const matsSinDoc = new Set();
+    todosHorarios.forEach(h=>{ if(!materia(h.materiaId)?.docenteId) matsSinDoc.add(h.materiaId); });
+    matsSinDoc.forEach(mid=>{ const m=materia(mid); if(m) avisos.push(`🟡 <strong>Sin docente:</strong> La materia "${esc(m.nombre)}" tiene clases en el horario pero no tiene docente asignado.`); });
+
+    // ── Render de resultados ──
+    const bloque = (titulo, color, items) => items.length ? `
+      <div class="card" style="border-left:4px solid ${color};margin-bottom:.9rem">
+        <h3 style="margin-bottom:.6rem">${titulo} <span class="tag" style="background:${color}20;color:${color}">${items.length}</span></h3>
+        ${items.map(i=>`<p style="margin-bottom:.4rem;font-size:.88rem">${i}</p>`).join('')}
+      </div>` : '';
+
+    const sin = !problemas.length && !avisos.length;
+    $('#auResultados').innerHTML =
+      (sin ? `<div class="card" style="border-left:4px solid var(--ok);text-align:center;padding:2rem"><span style="font-size:2.5rem">✅</span><h3 style="margin-top:.5rem">Horario limpio</h3><p class="muted">No se encontraron choques, conflictos ni materias sin asignar en el ciclo ${esc(ciclo)}.</p></div>` : '') +
+      bloque('🔴 Problemas críticos (requieren corrección)', 'var(--mal)', problemas) +
+      bloque('🟡 Advertencias (revisar)', 'var(--aviso)', avisos) +
+      bloque('✅ Carga docente', 'var(--ok)', info);
+  };
+
+  $('#auAuditar').addEventListener('click', auditar);
+  auditar(); // ejecutar al abrir
+}
+
+/* ───────────────────────── 24. ARRANQUE ───────────────────────── */
 const VISTAS = {
   dashboard:vistaDashboard, asistencia:vistaAsistencia, calificaciones:vistaCalificaciones,
   bitacora:vistaBitacora, docentes:vistaDocentes, materias:vistaMaterias, grupos:vistaGrupos,
-  horarios:vistaHorarios, calendario:vistaCalendario, credenciales:vistaCredenciales,
+  horarios:vistaHorarios, vistaplantel:vistaVistaPlantel, auditor:vistaAuditor,
+  calendario:vistaCalendario, credenciales:vistaCredenciales,
   consultas:vistaConsultas, estadisticas:vistaEstadisticas, reportes:vistaReportes,
 };
 iniciarSistema();   // decide modo local o nube (ver js/nube.js)
