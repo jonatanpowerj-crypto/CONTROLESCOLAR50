@@ -150,9 +150,54 @@ function semilla(){
   };
 }
 
+/* ── Ciclo escolar UAGro: Agosto–Enero = A (impar) · Febrero–Julio = B (par) ── */
+function cicloActualUAGro(fecha = new Date()){
+  const mes = fecha.getMonth()+1; // 1-12
+  const anio = fecha.getFullYear();
+  // Agosto(8) a Diciembre(12): ciclo A que termina en enero del año siguiente
+  if(mes>=8) return `${anio}-A`;
+  // Enero(1): aún es la cola del ciclo A iniciado el agosto anterior
+  if(mes===1) return `${anio-1}-A`;
+  // Febrero(2) a Julio(7): ciclo B del mismo año
+  return `${anio}-B`;
+}
+function siguienteCiclo(ciclo){
+  const m = /^(\d{4})-([AB])$/.exec(ciclo||'');
+  if(!m) return cicloActualUAGro();
+  const [,anio,letra] = m;
+  return letra==='A' ? `${anio}-B` : `${+anio+1}-A`;
+}
+
+/* ── Ciclo escolar UAGro: semestre impar (A) ago-ene, semestre par (B) feb-jul ── */
+function cicloActualAuto(){
+  const h = new Date(); const mes = h.getMonth()+1; // 1-12
+  const anioBase = mes>=8 ? h.getFullYear() : h.getFullYear()-1;
+  const letra = mes>=8 || mes<=1 ? 'A' : 'B';
+  return `${anioBase}-${letra}`;
+}
+function siguienteCiclo(ciclo){
+  const m = /^(\d{4})-([AB])$/.exec(ciclo||'');
+  if(!m) return cicloActualAuto();
+  const anio = +m[1];
+  return m[2]==='A' ? `${anio}-B` : `${anio+1}-A`;
+}
+function listaCiclos(n=6){
+  // Genera n ciclos hacia atrás y adelante del actual, para selectores
+  const out = []; let c = cicloActualAuto();
+  const m = /^(\d{4})-([AB])$/.exec(c); let anio=+m[1], letra=m[2];
+  for(let i=-2;i<n-2;i++){
+    let a=anio, l=letra;
+    let pasos=i;
+    while(pasos>0){ if(l==='A'){l='B';} else {l='A'; a++;} pasos--; }
+    while(pasos<0){ if(l==='B'){l='A';} else {l='B'; a--;} pasos++; }
+    out.push(`${a}-${l}`);
+  }
+  return [...new Set(out)];
+}
+
 function estructuraVacia(){
   return { plantel:{nombre:'Preparatoria No. 50', universidad:'Universidad Autónoma de Guerrero',
-      ciudad:'Tlacoachistlahuaca, Gro.', ciclo:'2026-A', toleranciaMin:10},
+      ciudad:'Tlacoachistlahuaca, Gro.', ciclo:cicloActualUAGro(), toleranciaMin:10},
     docentes:[], materias:[], grupos:[], alumnos:[], horarios:[], asistencias:[], calificaciones:[],
     bitacora:[], calendario:[] };
 }
@@ -1039,8 +1084,9 @@ function vistaGrupos(el){
   ${!admin?'<p class="muted" style="margin-bottom:.8rem">Ves los grupos donde impartes clase. La inscripción y baja de alumnos la gestiona la administración del plantel; tú llevas su asistencia y calificaciones.</p>':''}
   <div class="toolbar">
     <div class="field"><label>Grupo</label>
-      <select id="selGrupo">${opciones(grusVis, g=>`${g.nombre} · ${g.turno} (sem. ${g.semestre})`, grupoSel)}</select></div>
+      <select id="selGrupo">${opciones(grusVis, g=>`${g.nombre} · ${g.turno} (sem. ${g.semestre}) · ${g.ciclo||'sin ciclo'}`, grupoSel)}</select></div>
     ${admin?`<button class="btn btn-outline" id="nuevoGrupo">＋ Grupo</button>
+    <button class="btn btn-gold" id="promoverGrupo">⬆ Promover a siguiente ciclo</button>
     <button class="btn btn-danger btn-sm" id="bajaGrupo">Eliminar grupo</button>
     <div class="spacer"></div>
     <button class="btn btn-gold" id="impExcel">⬆ Importar desde Excel</button>
@@ -1050,15 +1096,19 @@ function vistaGrupos(el){
 
   $('#selGrupo').addEventListener('change', e=>{ grupoSel=e.target.value; pintar(); });
   if(admin){
+  $('#promoverGrupo').addEventListener('click', ()=>modalPromoverGrupo());
   $('#nuevoGrupo').addEventListener('click', ()=>{
     abrirModal('Nuevo grupo', `
       <div class="form-grid">
         <div class="field"><label>Nombre *</label><input id="gNom" placeholder='2° "C"'></div>
         <div class="field"><label>Semestre</label>
           <select id="gSem">${[1,2,3,4,5,6].map(s=>`<option>${s}</option>`).join('')}</select></div>
-        <div class="field full"><label>Turno</label>
+        <div class="field"><label>Turno</label>
           <select id="gTur"><option>Matutino</option><option>Vespertino</option></select></div>
+        <div class="field"><label>Ciclo escolar</label>
+          <select id="gCiclo">${listaCiclos().map(c=>`<option ${c===DB.plantel.ciclo?'selected':''}>${c}</option>`).join('')}</select></div>
       </div>
+      <p class="muted" style="font-size:.78rem;margin-top:.4rem">💡 UAGro: semestre impar (A) agosto–enero, semestre par (B) febrero–julio.</p>
       <div class="modal-foot"><button class="btn btn-outline" id="gCan">Cancelar</button>
       <button class="btn btn-primary" id="gOk">Crear grupo</button></div>`,
     body=>{
@@ -1066,7 +1116,8 @@ function vistaGrupos(el){
       body.querySelector('#gOk').addEventListener('click', ()=>{
         const nombre = body.querySelector('#gNom').value.trim();
         if(!nombre){ toast('Escribe el nombre del grupo.'); return; }
-        const g = {id:uid(), nombre, semestre:+body.querySelector('#gSem').value, turno:body.querySelector('#gTur').value};
+        const g = {id:uid(), nombre, semestre:+body.querySelector('#gSem').value,
+          turno:body.querySelector('#gTur').value, ciclo:body.querySelector('#gCiclo').value};
         DB.grupos.push(g); grupoSel = g.id;
         persist('grupos', g);
         cerrarModal(); render(); toast('Grupo creado.');
@@ -1267,20 +1318,28 @@ function generarBloques(hInicio, hFin, durMin, recesoTrasBloque, recesoMin){
    dos grupos al mismo tiempo, sin importar cuántos grupos existan.
    ═══════════════════════════════════════════════════════════════════ */
 function modalArmarPlantel(){
-  const grupos = DB.grupos;
-  if(!grupos.length){ toast('Registra al menos un grupo antes de armar el horario.'); return; }
+  const ciclosConGrupos = [...new Set(DB.grupos.map(g=>g.ciclo).filter(Boolean))];
+  const cicloDefault = ciclosConGrupos.includes(DB.plantel.ciclo) ? DB.plantel.ciclo : (ciclosConGrupos[0]||DB.plantel.ciclo);
+  if(!DB.grupos.length){ toast('Registra al menos un grupo antes de armar el horario.'); return; }
 
   abrirModal('🏫 Armar horario de TODO el plantel', `
-    <p class="muted">El sistema acomodará <strong>los ${grupos.length} grupos</strong> a la vez en la malla oficial (3:00–8:15 PM, receso 5:40–6:15). Si un docente imparte clase en varios grupos o semestres, el sistema <strong>nunca lo agendará dos veces a la misma hora</strong>: revisa simultáneamente grupo y docente. Cultura Digital se prioriza en 2–3 días por grupo.</p>
-    <div class="aviso-box" style="background:var(--aviso-bg);color:var(--aviso);border-radius:8px;padding:.6rem .8rem;font-size:.85rem;margin-top:.6rem">⚠️ Esto puede agregar muchas clases a la vez. Los horarios ya existentes de cada grupo se respetan (no se borran), pero te recomendamos hacerlo con grupos vacíos o casi vacíos de horario.</div>
+    <p class="muted">El sistema acomodará los grupos del ciclo elegido a la vez, en la malla oficial (3:00–8:15 PM, receso 5:40–6:15). Si un docente imparte clase en varios grupos o semestres, el sistema <strong>nunca lo agendará dos veces a la misma hora</strong>. Cultura Digital se prioriza en 2–3 días por grupo.</p>
+    <div class="field" style="margin-top:.7rem"><label>Ciclo escolar a armar</label>
+      <select id="hpCiclo">${listaCiclos().map(c=>`<option ${c===cicloDefault?'selected':''}>${c} ${DB.grupos.filter(g=>g.ciclo===c).length?'· '+DB.grupos.filter(g=>g.ciclo===c).length+' grupo(s)':'· sin grupos'}</option>`).join('')}</select></div>
+    <div class="aviso-box" style="background:var(--aviso-bg);color:var(--aviso);border-radius:8px;padding:.6rem .8rem;font-size:.85rem;margin-top:.6rem">⚠️ Solo se arman los grupos del ciclo seleccionado. Los horarios ya existentes se respetan (no se borran).</div>
     <div id="hpPreview" style="margin-top:.9rem"></div>
     <div class="modal-foot">
       <button class="btn btn-outline" id="hpCan">Cancelar</button>
-      <button class="btn btn-gold" id="hpVista">👁 Previsualizar plantel completo</button>
-      <button class="btn btn-primary" id="hpOk" disabled>Aplicar a todo el plantel</button>
+      <button class="btn btn-gold" id="hpVista">👁 Previsualizar</button>
+      <button class="btn btn-primary" id="hpOk" disabled>Aplicar al plantel</button>
     </div>`,
   body=>{
     let propuestaGlobal = [];
+    let grupos = DB.grupos.filter(g=>g.ciclo===cicloDefault || !g.ciclo);
+    body.querySelector('#hpCiclo').addEventListener('change', e=>{
+      grupos = DB.grupos.filter(g=>g.ciclo===e.target.value);
+      body.querySelector('#hpPreview').innerHTML=''; body.querySelector('#hpOk').disabled=true;
+    });
     body.querySelector('#hpCan').addEventListener('click', cerrarModal);
 
     const previsualizar = ()=>{
@@ -1582,9 +1641,7 @@ function vistaCredenciales(el){
     const zona = $('#credZona');
     zona.innerHTML = lista.length ? lista.map(a=>`
       <div class="credencial">
-        <div class="cred-franja"><strong>PREPARATORIA No. 50 · UAGro</strong><span>${esc(DB.plantel.ciclo)}</span></div>
-        <div class="cred-cuerpo">
-          <div class="cred-qr" id="qr_${a.id}"></div>
+        <div class="cred-franja"><strong>PREPARATORIA No. 50 · UAGro</strong><span>${esc(grupo(a.grupoId)?.ciclo||DB.plantel.ciclo)}</span></div>
           <div class="cred-datos">
             <h4>${esc(nombreCompleto(a))}</h4>
             <p class="mono">${esc(a.matricula)}</p>
@@ -1684,7 +1741,7 @@ function modalCredencialDigital(alumnoId){
     <p class="muted" style="margin-bottom:.8rem">Muestra este código al docente para registrar tu asistencia. Mantén el brillo de la pantalla al máximo. No la compartas: es personal.</p>
     <div style="display:flex;justify-content:center">
       <div class="credencial" style="margin:0 auto">
-        <div class="cred-franja"><strong>PREPARATORIA No. 50 · UAGro</strong><span>${esc(DB.plantel.ciclo)}</span></div>
+        <div class="cred-franja"><strong>PREPARATORIA No. 50 · UAGro</strong><span>${esc(g?.ciclo||DB.plantel.ciclo)}</span></div>
         <div class="cred-cuerpo">
           <div class="cred-qr" id="qrDigital"></div>
           <div class="cred-datos">
@@ -1926,8 +1983,8 @@ function generarBoletasPDF(lista){
     // Folio y ciclo (lado derecho)
     const W0 = doc.internal.pageSize.getWidth();
     doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(91,107,130);
-    doc.text(`Ciclo escolar: ${DB.plantel.ciclo||''}`, W0-14, 45, {align:'right'});
-    doc.text(`Folio: ${a.matricula}-${(DB.plantel.ciclo||'').replace(/[^\w]/g,'')}`, W0-14, 51, {align:'right'});
+    doc.text(`Ciclo escolar: ${g?.ciclo||DB.plantel.ciclo||''}`, W0-14, 45, {align:'right'});
+    doc.text(`Folio: ${a.matricula}-${(g?.ciclo||DB.plantel.ciclo||'').replace(/[^\w]/g,'')}`, W0-14, 51, {align:'right'});
 
     // Tabla de materias
     const materiasGrupo = [...new Set(DB.horarios.filter(h=>h.grupoId===a.grupoId).map(h=>h.materiaId))]
@@ -2045,6 +2102,43 @@ function detectaCampo(encabezado){
   const e = normaliza(encabezado);
   for(const campo in ALIAS_COLUMNAS) if(ALIAS_COLUMNAS[campo].includes(e)) return campo;
   return null;
+}
+
+/* Promueve un grupo al siguiente ciclo escolar y semestre, sin tocar el historial */
+function modalPromoverGrupo(){
+  const g = grupo(grupoSel);
+  if(!g){ toast('Selecciona un grupo primero.'); return; }
+  if(g.semestre>=6){ toast('Este grupo ya está en 6° semestre: es el último del plan de estudios.'); return; }
+  const sigCiclo = siguienteCiclo(g.ciclo||DB.plantel.ciclo);
+  const sigSem = g.semestre+1;
+  const alumnos = alumnosDeGrupo(g.id);
+
+  abrirModal('⬆ Promover grupo al siguiente ciclo', `
+    <p>El grupo <strong>${esc(g.nombre)}</strong> (${g.semestre}° semestre, ciclo ${esc(g.ciclo||'—')}) pasará a:</p>
+    <div class="card" style="background:var(--azul-100);border:none;margin:.7rem 0">
+      <strong>${sigSem}° semestre · Ciclo ${esc(sigCiclo)}</strong>
+    </div>
+    <p class="muted">Se creará un <strong>grupo nuevo</strong> con sus ${alumnos.length} alumno(s) trasladados. El grupo actual <strong>se conserva intacto</strong> (no se borra) con todo su historial de asistencias, calificaciones, bitácora y horario, para consulta futura.</p>
+    <div class="form-grid" style="margin-top:.7rem">
+      <div class="field full"><label>Nombre del nuevo grupo</label><input id="pgNombre" value="${esc(g.nombre.replace(/\d+°?/,sigSem+'°'))}"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" id="pgCan">Cancelar</button>
+    <button class="btn btn-primary" id="pgOk">Promover grupo</button></div>`,
+  body=>{
+    body.querySelector('#pgCan').addEventListener('click', cerrarModal);
+    body.querySelector('#pgOk').addEventListener('click', ()=>{
+      const nombre = body.querySelector('#pgNombre').value.trim();
+      if(!nombre){ toast('Escribe el nombre del nuevo grupo.'); return; }
+      const nuevoGrupo = {id:uid(), nombre, semestre:sigSem, turno:g.turno, ciclo:sigCiclo, grupoAnteriorId:g.id};
+      DB.grupos.push(nuevoGrupo); persist('grupos', nuevoGrupo);
+      const alumnosNuevos = alumnos.map(a=>({...a, grupoId:nuevoGrupo.id}));
+      alumnosNuevos.forEach(a=>{ const idx=DB.alumnos.findIndex(x=>x.id===a.id); if(idx>=0) DB.alumnos[idx]=a; });
+      persist('alumnos', alumnosNuevos);
+      grupoSel = nuevoGrupo.id;
+      cerrarModal(); render();
+      toast(`Grupo promovido: ${alumnos.length} alumno(s) ahora en ${nombre} (${sigSem}° sem., ${sigCiclo}). El grupo anterior se conservó con su historial.`);
+    });
+  });
 }
 
 function modalImportarExcel(){
