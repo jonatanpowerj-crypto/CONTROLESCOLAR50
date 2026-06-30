@@ -189,7 +189,7 @@ function listaCiclos(n=8){
 
 function estructuraVacia(){
   return { plantel:{nombre:'Preparatoria No. 50', universidad:'Universidad Autónoma de Guerrero',
-      ciudad:'Tlacoachistlahuaca, Gro.', ciclo:cicloActualUAGro(), toleranciaMin:10},
+      ciudad:'Tlacoachistlahuaca, Gro.', ciclo:cicloActualAuto(), toleranciaMin:10},
     docentes:[], materias:[], grupos:[], alumnos:[], horarios:[], asistencias:[], calificaciones:[],
     bitacora:[], calendario:[] };
 }
