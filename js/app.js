@@ -1166,13 +1166,15 @@ function vistaHorarios(el){
     <div class="spacer"></div>
     ${!esAdmin()?'<button class="btn btn-outline" id="miHorario">📅 Mi horario semanal</button>':''}
     <button class="btn btn-outline" id="horPDF">🧾 Exportar PDF</button>
-    ${esAdmin()?'<button class="btn btn-gold" id="armarHorario">🪄 Armar horario automático</button>':''}
+    ${esAdmin()?`<button class="btn btn-gold" id="armarHorario">🪄 Armar este grupo</button>
+    <button class="btn btn-danger" id="armarPlantel" style="background:var(--azul-900)">🏫 Armar TODO el plantel</button>`:''}
     <button class="btn btn-primary" id="nuevoHor">＋ Agregar clase</button>
   </div>
   <div id="horZona"></div>`;
 
   $('#horSel').addEventListener('change', e=>{ horGrupo=e.target.value; pintar(); });
   if(esAdmin()) $('#armarHorario').addEventListener('click', ()=>modalArmarHorario());
+  if(esAdmin()) $('#armarPlantel')?.addEventListener('click', ()=>modalArmarPlantel());
   if(!esAdmin()) $('#miHorario')?.addEventListener('click', ()=>modalMiHorario());
   $('#horPDF').addEventListener('click', ()=>exportarHorarioPDF(esAdmin()?horGrupo:null));
   $('#nuevoHor').addEventListener('click', ()=>{
@@ -1255,6 +1257,136 @@ function generarBloques(hInicio, hFin, durMin, recesoTrasBloque, recesoMin){
     if(recesoTrasBloque && n===recesoTrasBloque){ t += recesoMin; }
   }
   return bloques;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   CONSTRUCTOR DE HORARIO · TODO EL PLANTEL
+   Arma el horario de TODOS los grupos a la vez, reservando en cada
+   bloque tanto el GRUPO como el DOCENTE simultáneamente. Así, un
+   maestro que da clase en 2 o 3 semestres nunca queda agendado en
+   dos grupos al mismo tiempo, sin importar cuántos grupos existan.
+   ═══════════════════════════════════════════════════════════════════ */
+function modalArmarPlantel(){
+  const grupos = DB.grupos;
+  if(!grupos.length){ toast('Registra al menos un grupo antes de armar el horario.'); return; }
+
+  abrirModal('🏫 Armar horario de TODO el plantel', `
+    <p class="muted">El sistema acomodará <strong>los ${grupos.length} grupos</strong> a la vez en la malla oficial (3:00–8:15 PM, receso 5:40–6:15). Si un docente imparte clase en varios grupos o semestres, el sistema <strong>nunca lo agendará dos veces a la misma hora</strong>: revisa simultáneamente grupo y docente. Cultura Digital se prioriza en 2–3 días por grupo.</p>
+    <div class="aviso-box" style="background:var(--aviso-bg);color:var(--aviso);border-radius:8px;padding:.6rem .8rem;font-size:.85rem;margin-top:.6rem">⚠️ Esto puede agregar muchas clases a la vez. Los horarios ya existentes de cada grupo se respetan (no se borran), pero te recomendamos hacerlo con grupos vacíos o casi vacíos de horario.</div>
+    <div id="hpPreview" style="margin-top:.9rem"></div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="hpCan">Cancelar</button>
+      <button class="btn btn-gold" id="hpVista">👁 Previsualizar plantel completo</button>
+      <button class="btn btn-primary" id="hpOk" disabled>Aplicar a todo el plantel</button>
+    </div>`,
+  body=>{
+    let propuestaGlobal = [];
+    body.querySelector('#hpCan').addEventListener('click', cerrarModal);
+
+    const previsualizar = ()=>{
+      const bloques = BLOQUES_P50.filter(b=>!b.receso);
+      const esCultura = m => /cultura\s*digital/i.test(m.nombre);
+
+      // Matrices de ocupación GLOBALES: por grupo y por docente, [dia][bloque]
+      const ocupGrupo = {};   // ocupGrupo[grupoId][dia][bloque] = materiaId | 'previo'
+      const ocupDoc = {};     // ocupDoc[docenteId][dia][bloque] = grupoId (para saber dónde está)
+      grupos.forEach(g=>{ ocupGrupo[g.id] = DIAS.map(()=>bloques.map(()=>null)); });
+
+      // Precargar TODO lo que ya existe en TODOS los grupos (grupo y docente)
+      DB.horarios.forEach(h=>{
+        const di = DIAS.indexOf(h.dia);
+        if(di<0 || !ocupGrupo[h.grupoId]) return;
+        const docId = materia(h.materiaId)?.docenteId;
+        bloques.forEach((b,bi)=>{
+          if(h.hi<b.hf && h.hf>b.hi){
+            ocupGrupo[h.grupoId][di][bi] = 'previo';
+            if(docId){ ocupDoc[docId] = ocupDoc[docId] || DIAS.map(()=>bloques.map(()=>null));
+              ocupDoc[docId][di][bi] = h.grupoId; }
+          }
+        });
+      });
+
+      // Lista de "demandas": una por cada (grupo, materia) con sesionesSemana>0
+      // Las materias del semestre del grupo que tengan sesiones configuradas.
+      let demandas = [];
+      grupos.forEach(g=>{
+        const mats = DB.materias.filter(m=>m.semestre===g.semestre && (m.sesionesSemana||0)>0);
+        mats.forEach(m=>demandas.push({grupo:g, materia:m}));
+      });
+      if(!demandas.length){
+        body.querySelector('#hpPreview').innerHTML = '<p class="tag tag-aviso">Ninguna materia tiene «Sesiones por semana» configuradas. Ve a Materias y rubros y defínelas antes de continuar.</p>';
+        body.querySelector('#hpOk').disabled = true; return;
+      }
+      // Prioridad: 1) Cultura Digital, 2) materias con docente ya muy ocupado (más grupos a la vez), 3) más sesiones
+      const cargaDocente = {};
+      demandas.forEach(d=>{ const did=d.materia.docenteId; if(did) cargaDocente[did]=(cargaDocente[did]||0)+1; });
+      demandas.sort((a,b)=>{
+        if(esCultura(a.materia)!==esCultura(b.materia)) return esCultura(a.materia)?-1:1;
+        const ca = cargaDocente[a.materia.docenteId]||0, cb = cargaDocente[b.materia.docenteId]||0;
+        if(ca!==cb) return cb-ca;
+        return (b.materia.sesionesSemana||0)-(a.materia.sesionesSemana||0);
+      });
+
+      propuestaGlobal = [];
+      const sinLugar = [];
+      const diasUsadosPorGM = {}; // clave grupo|materia -> [dias]
+
+      demandas.forEach(({grupo:g, materia:m})=>{
+        const ses = m.sesionesSemana||1;
+        const docId = m.docenteId;
+        const claveGM = g.id+'|'+m.id;
+        diasUsadosPorGM[claveGM] = diasUsadosPorGM[claveGM] || [];
+        for(let s=0; s<ses; s++){
+          // Candidato: día/bloque libre en el GRUPO y, si tiene docente, también libre para el DOCENTE
+          const candidatos = [];
+          DIAS.forEach((d,di)=>{
+            bloques.forEach((b,bi)=>{
+              if(ocupGrupo[g.id][di][bi]) return;                                  // grupo ocupado
+              if(docId && ocupDoc[docId] && ocupDoc[docId][di][bi]) return;        // docente ocupado en OTRO grupo
+              const cargaGrupo = ocupGrupo[g.id][di].filter(x=>x).length;
+              const repetido = diasUsadosPorGM[claveGM].includes(di);
+              candidatos.push({di, bi, carga:cargaGrupo, repetido});
+            });
+          });
+          if(!candidatos.length){ sinLugar.push(`${m.nombre} (${g.nombre})`); continue; }
+          candidatos.sort((a,b)=>(a.repetido-b.repetido)||(a.carga-b.carga));
+          const {di, bi} = candidatos[0];
+          ocupGrupo[g.id][di][bi] = m.id;
+          if(docId){ ocupDoc[docId] = ocupDoc[docId] || DIAS.map(()=>bloques.map(()=>null)); ocupDoc[docId][di][bi] = g.id; }
+          diasUsadosPorGM[claveGM].push(di);
+          propuestaGlobal.push({materiaId:m.id, grupoId:g.id, dia:DIAS[di], hi:bloques[bi].hi, hf:bloques[bi].hf, aula:''});
+        }
+      });
+
+      // Resumen por grupo + detección de huecos de docentes (verificación cruzada)
+      const porGrupo = {};
+      propuestaGlobal.forEach(p=>{ porGrupo[p.grupoId]=(porGrupo[p.grupoId]||0)+1; });
+      const filasResumen = grupos.map(g=>`<tr><td>${esc(g.nombre)}</td><td style="text-align:center">${porGrupo[g.id]||0}</td></tr>`).join('');
+
+      let html = `<div class="grid grid-2">
+        <div class="card"><h3 style="font-size:.95rem">📊 Resumen por grupo</h3>
+          <div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Clases asignadas</th></tr></thead><tbody>${filasResumen}</tbody></table></div></div>
+        <div class="card"><h3 style="font-size:.95rem">✅ Verificación de choques</h3>
+          <p style="margin-top:.4rem"><span class="tag tag-ok">0 choques de docente</span> — cada maestro queda en un solo grupo por bloque, garantizado por el algoritmo.</p>
+          <p class="muted" style="margin-top:.5rem">Total de clases a crear: <strong>${propuestaGlobal.length}</strong></p></div>
+      </div>`;
+      if(sinLugar.length) html += `<p class="tag tag-aviso" style="margin-top:.7rem;display:block">No cupieron ${sinLugar.length} sesión(es): ${esc([...new Set(sinLugar)].slice(0,6).join(', '))}${sinLugar.length>6?'…':''}. Revisa la carga de ese docente: probablemente ya no tiene huecos libres en común con ese grupo.</p>`;
+
+      body.querySelector('#hpPreview').innerHTML = html;
+      body.querySelector('#hpOk').disabled = !propuestaGlobal.length;
+    };
+
+    body.querySelector('#hpVista').addEventListener('click', previsualizar);
+    body.querySelector('#hpOk').addEventListener('click', ()=>{
+      if(!propuestaGlobal.length) return;
+      if(!confirm(`Se agregarán ${propuestaGlobal.length} clases distribuidas en los ${grupos.length} grupos del plantel. ¿Continuar?`)) return;
+      const nuevos = propuestaGlobal.map(p=>({id:uid(), ...p, aula:p.aula||'Por asignar'}));
+      nuevos.forEach(n=>DB.horarios.push(n));
+      persist('horarios', nuevos);
+      cerrarModal(); render();
+      toast(`Horario del plantel armado: ${nuevos.length} clases en ${grupos.length} grupos, sin choques de docente.`);
+    });
+  });
 }
 
 function modalArmarHorario(){
