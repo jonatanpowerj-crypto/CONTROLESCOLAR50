@@ -22,6 +22,17 @@ rules_version = '2';
 // ════════════════════════════════════════════════════════════════
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Bandeja de entrada de la app de registro de docentes:
+    // cualquiera puede crear/actualizar su propio registro (sin sesión),
+    // pero solo el administrador con sesión puede borrarlos.
+    match /registros_docentes/{doc} {
+      allow read, create, update: if true;
+      allow delete: if request.auth != null;
+    }
+
+    // Resto del sistema: lectura pública (portal de padres),
+    // escritura solo con sesión de docente o administrador.
     match /{coleccion}/{documento=**} {
       allow read:  if true;
       allow write: if request.auth != null;
