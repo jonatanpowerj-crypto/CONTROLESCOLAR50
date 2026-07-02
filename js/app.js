@@ -383,11 +383,14 @@ function vistaDashboard(el){
   <div class="grid grid-2" style="margin-top:1rem">
     <div class="card">
       <h3>🗓️ Clases programadas hoy</h3>
-      ${clasesHoy.length ? clasesHoy.map(h=>`
-        <div class="bloque-clase">
-          <strong>${esc(h.hi)}–${esc(h.hf)} · ${esc(materia(h.materiaId)?.nombre || '—')}</strong>
+      ${clasesHoy.length ? clasesHoy.map(h=>{
+        const ahora = new Date().toTimeString().slice(0,5);
+        const enCurso = h.hi<=ahora && ahora<h.hf;
+        const proxima = h.hi>ahora;
+        return `<div class="bloque-clase" style="${enCurso?'border-left-color:var(--ok);background:var(--ok-bg)':proxima?'border-left-color:var(--oro-500)':'opacity:.6'}">
+          <strong>${esc(h.hi)}–${esc(h.hf)} · ${esc(materia(h.materiaId)?.nombre || '—')} ${enCurso?'<span class="tag tag-ok">Ahora</span>':''}</strong>
           <span>${esc(grupo(h.grupoId)?.nombre || '')} · ${esc(h.aula)} · ${esc(docente(materia(h.materiaId)?.docenteId)?.nombre || '')}</span>
-        </div>`).join('')
+        </div>`;}).join('')
       : `<div class="vacio"><span class="icono">🌤️</span>No hay clases registradas para hoy.</div>`}
       <button class="btn btn-primary btn-sm no-print" style="margin-top:.6rem" id="irPase">Iniciar pase de lista →</button>
     </div>
@@ -1015,6 +1018,10 @@ function formMateria(id){
         <input type="number" id="fHoras" min="0" max="20" value="${m.horasSemana||0}" placeholder="Ej. 4"></div>
       <div class="field"><label>Sesiones por semana</label>
         <input type="number" id="fSes" min="0" max="5" value="${m.sesionesSemana||0}" placeholder="Ej. 2"></div>
+      <div class="field full"><label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+        <input type="checkbox" id="fPrioridad" ${m.prioridadTemprana?'checked':''} style="width:18px;height:18px">
+        ⭐ Priorizar en las primeras horas de la semana</label>
+        <span class="muted" style="font-size:.74rem">Útil para materias que requieren mayor concentración (matemáticas, ciencias).</span></div>
       ${(typeof esAdmin==='function' && !esAdmin())
         ? `<input type="hidden" id="fDoc" value="${esc(m.docenteId || (typeof PERFIL!=='undefined'?PERFIL.docenteId:'') || '')}">`
         : `<div class="field full"><label>Docente responsable</label>
@@ -1057,6 +1064,7 @@ function formMateria(id){
       const datos = {clave, nombre, semestre:+body.querySelector('#fSem').value,
         horasSemana:+body.querySelector('#fHoras').value||0,
         sesionesSemana:+body.querySelector('#fSes').value||0,
+        prioridadTemprana:body.querySelector('#fPrioridad')?.checked||false,
         docenteId: docId, rubros};
       let obj;
       if(id){ obj = materia(id); Object.assign(obj, datos); }
@@ -1384,28 +1392,60 @@ function modalArmarPlantel(){
       const sinLugar = [];
       const diasUsadosPorGM = {}; // clave grupo|materia -> [dias]
 
+      // Carga total por docente (para regla de día de descanso)
+      const cargaTotalDoc = {};
+      demandas.forEach(({materia:m})=>{ if(m.docenteId) cargaTotalDoc[m.docenteId]=(cargaTotalDoc[m.docenteId]||0)+(m.sesionesSemana||1); });
+      // Días en que cada docente ya tiene clase (para intentar dejarle uno libre)
+      const diasDoc = {}; // docId -> Set(diaIndex)
+
       demandas.forEach(({grupo:g, materia:m})=>{
         const ses = m.sesionesSemana||1;
         const docId = m.docenteId;
         const claveGM = g.id+'|'+m.id;
         diasUsadosPorGM[claveGM] = diasUsadosPorGM[claveGM] || [];
+        // ¿Materia de poca carga? (1-2 sesiones) → concentrar en menos días
+        const pocaCarga = ses<=2;
+        // ¿Docente con carga grande? (>20 sesiones/sem) → merece un día de descanso
+        const cargaGrande = (cargaTotalDoc[docId]||0) > 20;
+
         for(let s=0; s<ses; s++){
-          // Candidato: día/bloque libre en el GRUPO y, si tiene docente, también libre para el DOCENTE
           const candidatos = [];
           DIAS.forEach((d,di)=>{
             bloques.forEach((b,bi)=>{
-              if(ocupGrupo[g.id][di][bi]) return;                                  // grupo ocupado
-              if(docId && ocupDoc[docId] && ocupDoc[docId][di][bi]) return;        // docente ocupado en OTRO grupo
+              if(ocupGrupo[g.id][di][bi]) return;                            // grupo ocupado
+              if(docId && ocupDoc[docId] && ocupDoc[docId][di][bi]) return;  // docente ocupado en otro grupo
               const cargaGrupo = ocupGrupo[g.id][di].filter(x=>x).length;
               const repetido = diasUsadosPorGM[claveGM].includes(di);
-              candidatos.push({di, bi, carga:cargaGrupo, repetido});
+              // Regla día de descanso: si el docente tiene carga grande y este día
+              // aún no lo usa, y ya usa 4+ días, penalizamos abrir un 5º día.
+              const diasDelDoc = diasDoc[docId] ? diasDoc[docId].size : 0;
+              const abririaNuevoDia = docId && diasDoc[docId] && !diasDoc[docId].has(di);
+              const penalDescanso = (cargaGrande && abririaNuevoDia && diasDelDoc>=4) ? 100 : 0;
+              candidatos.push({di, bi, carga:cargaGrupo, repetido, penalDescanso});
             });
           });
           if(!candidatos.length){ sinLugar.push(`${m.nombre} (${g.nombre})`); continue; }
-          candidatos.sort((a,b)=>(a.repetido-b.repetido)||(a.carga-b.carga));
+
+          candidatos.sort((a,b)=>{
+            // 1) Evitar quitarle el día de descanso al docente con carga grande
+            if(a.penalDescanso!==b.penalDescanso) return a.penalDescanso-b.penalDescanso;
+            // 2) Prioridad temprana: materias marcadas van a los primeros bloques
+            if(m.prioridadTemprana){ if(a.bi!==b.bi) return a.bi-b.bi; }
+            // 3) Poca carga: concentrar en días ya usados por esta materia (menos días)
+            if(pocaCarga){ if(a.repetido!==b.repetido) return b.repetido-a.repetido; }
+            else { if(a.repetido!==b.repetido) return a.repetido-b.repetido; } // resto: repartir
+            // 4) Balancear carga diaria del grupo
+            return a.carga-b.carga;
+          });
+
           const {di, bi} = candidatos[0];
           ocupGrupo[g.id][di][bi] = m.id;
-          if(docId){ ocupDoc[docId] = ocupDoc[docId] || DIAS.map(()=>bloques.map(()=>null)); ocupDoc[docId][di][bi] = g.id; }
+          if(docId){
+            ocupDoc[docId] = ocupDoc[docId] || DIAS.map(()=>bloques.map(()=>null));
+            ocupDoc[docId][di][bi] = g.id;
+            diasDoc[docId] = diasDoc[docId] || new Set();
+            diasDoc[docId].add(di);
+          }
           diasUsadosPorGM[claveGM].push(di);
           propuestaGlobal.push({materiaId:m.id, grupoId:g.id, dia:DIAS[di], hi:bloques[bi].hi, hf:bloques[bi].hf, aula:''});
         }
@@ -2806,6 +2846,8 @@ function vistaAuditor(el){
       <div class="field"><label>Ciclo a auditar</label>
         <select id="auCiclo">${listaCiclos().map(c=>`<option ${c===(DB.plantel.ciclo||cicloActualAuto())?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="spacer"></div>
+      <button class="btn btn-outline" id="auTabla">📊 Tabla de carga horaria</button>
+      <button class="btn btn-gold" id="auAjuste">🔧 Ajuste automático</button>
       <button class="btn btn-primary" id="auAuditar">🔍 Ejecutar auditoría</button>
     </div>
   </div>
@@ -2886,7 +2928,165 @@ function vistaAuditor(el){
   };
 
   $('#auAuditar').addEventListener('click', auditar);
+  $('#auTabla').addEventListener('click', ()=>tablaCargaHoraria($('#auCiclo').value));
+  $('#auAjuste').addEventListener('click', ()=>modalAjusteAutomatico($('#auCiclo').value));
   auditar(); // ejecutar al abrir
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TABLA MAESTRA DE CARGA HORARIA
+   Todos los docentes en filas × días de la semana en columnas, con el
+   total de horas y detección visual de duplicados (celdas en rojo).
+   ═══════════════════════════════════════════════════════════════════════ */
+function tablaCargaHoraria(ciclo){
+  const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
+  const gids = new Set(grupos.map(g=>g.id));
+  const clasesCiclo = DB.horarios.filter(h=>gids.has(h.grupoId));
+  const bloques = BLOQUES_P50.filter(b=>!b.receso);
+
+  // Mapa docente → día → [clases]
+  const docentes = DB.docentes.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const cargaData = docentes.map(d=>{
+    const clasesDoc = clasesCiclo.filter(h=>materia(h.materiaId)?.docenteId===d.id);
+    const porDia = {}; let dupl = 0;
+    DIAS.forEach(dia=>{
+      const cls = clasesDoc.filter(h=>h.dia===dia).sort((a,b)=>a.hi.localeCompare(b.hi));
+      // Detectar duplicados: mismo docente, mismo bloque, distinto grupo
+      const porBloque = {};
+      cls.forEach(c=>{ porBloque[c.hi]=(porBloque[c.hi]||0)+1; if(porBloque[c.hi]>1) dupl++; });
+      porDia[dia] = cls;
+    });
+    return {docente:d, porDia, total:clasesDoc.length, duplicados:dupl,
+      diasActivos:DIAS.filter(dia=>porDia[dia].length>0).length};
+  });
+
+  const html = `
+    <div class="card">
+      <h3 style="margin-bottom:.3rem">📊 Carga horaria por docente · Ciclo ${esc(ciclo)}</h3>
+      <p class="muted" style="margin-bottom:.8rem">Las celdas <span style="background:var(--mal-bg);color:var(--mal);padding:.05rem .3rem;border-radius:4px">en rojo</span> indican que el docente tiene dos clases en el mismo horario (duplicado a corregir). Usa «Ajuste automático» para resolverlos.</p>
+      <div class="table-wrap"><table style="font-size:.82rem">
+        <thead><tr>
+          <th style="text-align:left">Docente</th>
+          ${DIAS.map(d=>`<th>${d.slice(0,3)}</th>`).join('')}
+          <th>Total h/sem</th><th>Días</th><th>Estado</th></tr></thead>
+        <tbody>
+        ${cargaData.map(cd=>`<tr>
+          <td style="text-align:left"><strong>${esc(cd.docente.nombre)}</strong></td>
+          ${DIAS.map(dia=>{
+            const cls = cd.porDia[dia];
+            const bloqueCount = {};
+            cls.forEach(c=>bloqueCount[c.hi]=(bloqueCount[c.hi]||0)+1);
+            const hayDup = Object.values(bloqueCount).some(n=>n>1);
+            return `<td style="${hayDup?'background:var(--mal-bg)':''}">${cls.length||'—'}</td>`;
+          }).join('')}
+          <td><strong>${cd.total}</strong></td>
+          <td>${cd.diasActivos}/5</td>
+          <td>${cd.duplicados>0?`<span class="tag tag-mal">${cd.duplicados} dupl.</span>`
+            : cd.total>35?`<span class="tag tag-aviso">Sobrecarga</span>`
+            : cd.total===0?`<span class="muted">Sin carga</span>`
+            : cd.diasActivos>=5&&cd.total>=20?`<span class="tag tag-aviso">Sin día libre</span>`
+            : `<span class="tag tag-ok">OK</span>`}</td>
+        </tr>`).join('')}
+        </tbody>
+      </table></div>
+    </div>`;
+  $('#auResultados').innerHTML = html;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   AJUSTE AUTOMÁTICO
+   Detecta duplicados de docente (mismo bloque, dos grupos) y los reubica
+   automáticamente a un hueco libre, respetando grupo y docente.
+   ═══════════════════════════════════════════════════════════════════════ */
+function modalAjusteAutomatico(ciclo){
+  const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
+  const gids = new Set(grupos.map(g=>g.id));
+  const bloques = BLOQUES_P50.filter(b=>!b.receso);
+
+  // Detectar duplicados de docente
+  const conflictos = [];
+  const mapaDoc = {}; // docId|dia|hi → [horarios]
+  DB.horarios.filter(h=>gids.has(h.grupoId)).forEach(h=>{
+    const did = materia(h.materiaId)?.docenteId; if(!did) return;
+    const k = `${did}|${h.dia}|${h.hi}`;
+    (mapaDoc[k]=mapaDoc[k]||[]).push(h);
+  });
+  Object.entries(mapaDoc).forEach(([k,lst])=>{ if(lst.length>1){
+    const [did,dia,hi]=k.split('|');
+    // El primero se queda, los demás son conflictos a reubicar
+    lst.slice(1).forEach(h=>conflictos.push({horario:h, docId:did, dia, hi}));
+  }});
+
+  if(!conflictos.length){
+    abrirModal('🔧 Ajuste automático', `<div class="vacio"><span class="icono">✅</span>No hay duplicados de docente que corregir en el ciclo ${esc(ciclo)}. El horario está limpio.</div>
+      <div class="modal-foot"><button class="btn btn-primary" id="ajCerrar">Entendido</button></div>`,
+      body=>body.querySelector('#ajCerrar').addEventListener('click', cerrarModal));
+    return;
+  }
+
+  // Calcular reubicaciones posibles (simulación)
+  const ocupGrupo = {}, ocupDoc = {};
+  grupos.forEach(g=>ocupGrupo[g.id]=DIAS.map(()=>bloques.map(()=>null)));
+  DB.horarios.filter(h=>gids.has(h.grupoId)).forEach(h=>{
+    const di=DIAS.indexOf(h.dia), bi=bloques.findIndex(b=>b.hi===h.hi);
+    if(di<0||bi<0) return;
+    if(ocupGrupo[h.grupoId]) ocupGrupo[h.grupoId][di][bi]=h.id;
+    const did=materia(h.materiaId)?.docenteId;
+    if(did){ ocupDoc[did]=ocupDoc[did]||DIAS.map(()=>bloques.map(()=>null)); ocupDoc[did][di][bi]=h.id; }
+  });
+
+  const plan = [];
+  conflictos.forEach(cf=>{
+    const h = cf.horario, did = cf.docId;
+    const diOrig=DIAS.indexOf(h.dia), biOrig=bloques.findIndex(b=>b.hi===h.hi);
+    // Liberar posición actual del conflicto
+    if(ocupGrupo[h.grupoId]) ocupGrupo[h.grupoId][diOrig][biOrig]=null;
+    if(ocupDoc[did]) ocupDoc[did][diOrig][biOrig]=null;
+    // Buscar hueco libre para grupo Y docente
+    let colocado=null;
+    for(let di=0; di<DIAS.length && !colocado; di++){
+      for(let bi=0; bi<bloques.length && !colocado; bi++){
+        if(ocupGrupo[h.grupoId][di][bi]) continue;
+        if(ocupDoc[did] && ocupDoc[did][di][bi]) continue;
+        colocado={di,bi};
+      }
+    }
+    if(colocado){
+      ocupGrupo[h.grupoId][colocado.di][colocado.bi]=h.id;
+      ocupDoc[did]=ocupDoc[did]||DIAS.map(()=>bloques.map(()=>null));
+      ocupDoc[did][colocado.di][colocado.bi]=h.id;
+      plan.push({horario:h, de:{dia:h.dia,hi:h.hi}, a:{dia:DIAS[colocado.di], hi:bloques[colocado.bi].hi, hf:bloques[colocado.bi].hf}});
+    } else {
+      plan.push({horario:h, de:{dia:h.dia,hi:h.hi}, a:null}); // sin hueco
+    }
+  });
+
+  const filas = plan.map(p=>{
+    const m=materia(p.horario.materiaId), g=grupo(p.horario.grupoId);
+    return `<tr><td>${esc(docente(materia(p.horario.materiaId)?.docenteId)?.nombre||'')}</td>
+      <td>${esc(m?.nombre||'')} · ${esc(g?.nombre||'')}</td>
+      <td class="mono">${esc(p.de.dia.slice(0,3))} ${esc(p.de.hi)}</td>
+      <td>${p.a?`<span class="tag tag-ok">${esc(p.a.dia.slice(0,3))} ${esc(p.a.hi)}</span>`:'<span class="tag tag-mal">Sin hueco libre</span>'}</td></tr>`;
+  }).join('');
+
+  abrirModal('🔧 Ajuste automático de duplicados', `
+    <p class="muted">Se detectaron <strong>${conflictos.length}</strong> clase(s) con el docente duplicado en el mismo horario. El sistema propone reubicarlas así:</p>
+    <div class="table-wrap" style="max-height:300px;overflow-y:auto;margin-top:.6rem"><table style="font-size:.83rem">
+      <thead><tr><th>Docente</th><th>Materia · Grupo</th><th>Estaba en</th><th>Se mueve a</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>
+    <div class="modal-foot"><button class="btn btn-outline" id="ajCan">Cancelar</button>
+    <button class="btn btn-primary" id="ajOk">Aplicar reubicaciones</button></div>`,
+  body=>{
+    body.querySelector('#ajCan').addEventListener('click', cerrarModal);
+    body.querySelector('#ajOk').addEventListener('click', ()=>{
+      const aplicables = plan.filter(p=>p.a);
+      aplicables.forEach(p=>{ p.horario.dia=p.a.dia; p.horario.hi=p.a.hi; p.horario.hf=p.a.hf; });
+      persist('horarios', aplicables.map(p=>p.horario));
+      cerrarModal(); render();
+      const sinHueco = plan.length-aplicables.length;
+      toast(`${aplicables.length} clase(s) reubicada(s).${sinHueco?` ${sinHueco} sin hueco (revisa manualmente).`:''}`);
+    });
+  });
 }
 
 /* ───────────────────────── 24. ARRANQUE ───────────────────────── */
