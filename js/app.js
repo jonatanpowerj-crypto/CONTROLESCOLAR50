@@ -1329,7 +1329,11 @@ function modalArmarPlantel(){
     <p class="muted">El sistema acomodará los grupos del ciclo elegido a la vez, en la malla oficial (3:00–8:15 PM, receso 5:40–6:15). Si un docente imparte clase en varios grupos o semestres, el sistema <strong>nunca lo agendará dos veces a la misma hora</strong>. Cultura Digital se prioriza en 2–3 días por grupo.</p>
     <div class="field" style="margin-top:.7rem"><label>Ciclo escolar a armar</label>
       <select id="hpCiclo">${listaCiclos().map(c=>`<option ${c===cicloDefault?'selected':''}>${c} ${DB.grupos.filter(g=>g.ciclo===c).length?'· '+DB.grupos.filter(g=>g.ciclo===c).length+' grupo(s)':'· sin grupos'}</option>`).join('')}</select></div>
-    <div class="aviso-box" style="background:var(--aviso-bg);color:var(--aviso);border-radius:8px;padding:.6rem .8rem;font-size:.85rem;margin-top:.6rem">⚠️ Solo se arman los grupos del ciclo seleccionado. Los horarios ya existentes se respetan (no se borran).</div>
+    <div class="field full" style="margin-top:.6rem"><label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
+      <input type="checkbox" id="hpReiniciar" checked style="width:18px;height:18px">
+      🔄 Reiniciar horario: borrar TODAS las clases actuales de estos grupos antes de armar</label>
+      <span class="muted" style="font-size:.76rem">Recomendado. Evita duplicar sesiones si ya armaste antes. Desmárcalo solo si quieres conservar clases agregadas a mano y sumar el resto.</span></div>
+    <div id="hpAvisoExistente" style="margin-top:.5rem"></div>
     <div id="hpPreview" style="margin-top:.9rem"></div>
     <div class="modal-foot">
       <button class="btn btn-outline" id="hpCan">Cancelar</button>
@@ -1339,9 +1343,17 @@ function modalArmarPlantel(){
   body=>{
     let propuestaGlobal = [];
     let grupos = DB.grupos.filter(g=>g.ciclo===cicloDefault || !g.ciclo);
+    const mostrarAvisoExistente = ()=>{
+      const gids = new Set(grupos.map(g=>g.id));
+      const n = DB.horarios.filter(h=>gids.has(h.grupoId)).length;
+      body.querySelector('#hpAvisoExistente').innerHTML = n
+        ? `<p class="tag tag-aviso">Estos grupos ya tienen ${n} clase(s) en el horario actual.</p>` : '';
+    };
+    mostrarAvisoExistente();
     body.querySelector('#hpCiclo').addEventListener('change', e=>{
       grupos = DB.grupos.filter(g=>g.ciclo===e.target.value);
       body.querySelector('#hpPreview').innerHTML=''; body.querySelector('#hpOk').disabled=true;
+      mostrarAvisoExistente();
     });
     body.querySelector('#hpCan').addEventListener('click', cerrarModal);
 
@@ -1648,12 +1660,24 @@ function modalArmarPlantel(){
     body.querySelector('#hpVista').addEventListener('click', previsualizar);
     body.querySelector('#hpOk').addEventListener('click', ()=>{
       if(!propuestaGlobal.length) return;
-      if(!confirm(`Se agregarán ${propuestaGlobal.length} clases distribuidas en los ${grupos.length} grupos del plantel. ¿Continuar?`)) return;
+      const reiniciar = body.querySelector('#hpReiniciar').checked;
+      const gids = new Set(grupos.map(g=>g.id));
+      const existentes = DB.horarios.filter(h=>gids.has(h.grupoId));
+      const msj = reiniciar
+        ? `Se borrarán las ${existentes.length} clase(s) actuales de estos grupos y se crearán ${propuestaGlobal.length} nuevas. ¿Continuar?`
+        : `Se AGREGARÁN ${propuestaGlobal.length} clases nuevas, sumándose a las ${existentes.length} que ya existen (puede duplicar sesiones si ya habías armado antes). ¿Continuar?`;
+      if(!confirm(msj)) return;
+
+      if(reiniciar && existentes.length){
+        const idsBorrar = new Set(existentes.map(h=>h.id));
+        DB.horarios = DB.horarios.filter(h=>!idsBorrar.has(h.id));
+        persistDel('horarios', [...idsBorrar]);
+      }
       const nuevos = propuestaGlobal.map(p=>({id:uid(), ...p, aula:p.aula||'Por asignar'}));
       nuevos.forEach(n=>DB.horarios.push(n));
       persist('horarios', nuevos);
       cerrarModal(); render();
-      toast(`Horario del plantel armado: ${nuevos.length} clases en ${grupos.length} grupos, sin choques de docente.`);
+      toast(`Horario del plantel armado: ${nuevos.length} clases en ${grupos.length} grupos, sin choques de docente.${reiniciar&&existentes.length?` (${existentes.length} clases previas reemplazadas)`:''}`);
     });
   });
 }
@@ -3024,6 +3048,7 @@ function vistaAuditor(el){
       <div class="spacer"></div>
       <button class="btn btn-outline" id="auTabla">📊 Tabla de carga horaria</button>
       <button class="btn btn-outline" id="auBalance">⚖️ Balancear carga</button>
+      <button class="btn btn-danger" id="auLimpiar">🧹 Quitar sesiones excedidas</button>
       <button class="btn btn-gold" id="auAjuste">🔧 Ajuste automático</button>
       <button class="btn btn-primary" id="auAuditar">🔍 Ejecutar auditoría</button>
     </div>
@@ -3120,6 +3145,7 @@ function vistaAuditor(el){
   $('#auTabla').addEventListener('click', ()=>tablaCargaHoraria($('#auCiclo').value));
   $('#auBalance').addEventListener('click', ()=>modalBalanceCarga($('#auCiclo').value));
   $('#auAjuste').addEventListener('click', ()=>modalAjusteAutomatico($('#auCiclo').value));
+  $('#auLimpiar').addEventListener('click', ()=>modalLimpiarExcedidas($('#auCiclo').value));
   auditar(); // ejecutar al abrir
 }
 
@@ -3316,6 +3342,74 @@ function modalBalanceCarga(ciclo){
       persist('materias', cambios);
       cerrarModal(); render();
       toast(`${sugerencias.length} materia(s) reasignada(s). Ahora rearma el horario del plantel.`);
+    });
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIMPIEZA DE SESIONES EXCEDIDAS
+   Cuando una materia tiene más clases asignadas de las configuradas
+   (sesionesSemana), esto suele deberse a haber armado el plantel más de
+   una vez sin reiniciar. Esta herramienta detecta el exceso por cada
+   (grupo, materia) y elimina las clases sobrantes, dejando exactamente
+   las sesiones configuradas (conserva las mejor distribuidas en la semana).
+   ═══════════════════════════════════════════════════════════════════════ */
+function modalLimpiarExcedidas(ciclo){
+  const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
+  const gids = new Set(grupos.map(g=>g.id));
+
+  const excesos = [];
+  grupos.forEach(g=>{
+    const mats = DB.materias.filter(m=>m.semestre===g.semestre && (m.sesionesSemana||0)>0);
+    mats.forEach(m=>{
+      const clases = DB.horarios.filter(h=>h.grupoId===g.id && h.materiaId===m.id)
+        .sort((a,b)=> DIAS.indexOf(a.dia)-DIAS.indexOf(b.dia) || a.hi.localeCompare(b.hi));
+      if(clases.length > m.sesionesSemana){
+        // Conservar las primeras (mejor repartidas por día distinto); sobrantes = el resto
+        const diasVistos = new Set(); const conservar = []; const sobrantes = [];
+        clases.forEach(c=>{
+          if(conservar.length < m.sesionesSemana && !diasVistos.has(c.dia)){
+            conservar.push(c); diasVistos.add(c.dia);
+          } else sobrantes.push(c);
+        });
+        // Si aún faltan por recortar (varias el mismo día), completar desde el resto
+        while(conservar.length < m.sesionesSemana && sobrantes.length){ conservar.push(sobrantes.shift()); }
+        excesos.push({grupo:g, materia:m, configuradas:m.sesionesSemana, actuales:clases.length, sobrantes});
+      }
+    });
+  });
+
+  if(!excesos.length){
+    abrirModal('🧹 Sesiones excedidas', `<div class="vacio"><span class="icono">✅</span>No hay materias con más clases de las configuradas en el ciclo ${esc(ciclo)}.</div>
+      <div class="modal-foot"><button class="btn btn-primary" id="lxCerrar">Entendido</button></div>`,
+      body=>body.querySelector('#lxCerrar').addEventListener('click', cerrarModal));
+    return;
+  }
+
+  const totalSobrantes = excesos.reduce((a,e)=>a+e.sobrantes.length,0);
+  const filas = excesos.map(e=>`<tr>
+    <td>${esc(e.materia.nombre)}</td><td>${esc(e.grupo.nombre)}</td>
+    <td style="text-align:center">${e.configuradas}</td>
+    <td style="text-align:center"><span class="tag tag-mal">${e.actuales}</span></td>
+    <td style="text-align:center"><strong>${e.sobrantes.length}</strong></td></tr>`).join('');
+
+  abrirModal('🧹 Quitar sesiones excedidas', `
+    <p class="muted">Se detectaron <strong>${excesos.length}</strong> materia(s) con más clases de las configuradas — normalmente por haber armado el horario del plantel más de una vez. Se eliminarán las clases sobrantes, dejando exactamente las sesiones configuradas de cada una:</p>
+    <div class="table-wrap" style="max-height:300px;overflow-y:auto;margin-top:.6rem"><table style="font-size:.83rem">
+      <thead><tr><th>Materia</th><th>Grupo</th><th>Config.</th><th>Actuales</th><th>A quitar</th></tr></thead>
+      <tbody>${filas}</tbody></table></div>
+    <div class="aviso-box" style="background:var(--aviso-bg);color:var(--aviso);border-radius:8px;padding:.6rem .8rem;font-size:.83rem;margin-top:.7rem">⚠️ Se eliminarán <strong>${totalSobrantes}</strong> clase(s) en total. Esta acción no se puede deshacer.</div>
+    <div class="modal-foot"><button class="btn btn-outline" id="lxCan">Cancelar</button>
+    <button class="btn btn-danger" id="lxOk">Quitar ${totalSobrantes} clase(s) sobrante(s)</button></div>`,
+  body=>{
+    body.querySelector('#lxCan').addEventListener('click', cerrarModal);
+    body.querySelector('#lxOk').addEventListener('click', ()=>{
+      const idsBorrar = new Set();
+      excesos.forEach(e=>e.sobrantes.forEach(c=>idsBorrar.add(c.id)));
+      DB.horarios = DB.horarios.filter(h=>!idsBorrar.has(h.id));
+      persistDel('horarios', [...idsBorrar]);
+      cerrarModal(); render();
+      toast(`${idsBorrar.size} clase(s) sobrante(s) eliminada(s). Revisa la tabla de carga para confirmar.`);
     });
   });
 }
