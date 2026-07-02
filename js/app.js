@@ -815,7 +815,8 @@ function aplicarRegistro(data){
     DB.docentes.push(doc); persist('docentes', doc); }
   const cambios = [];
   data.materias.forEach(m=>{
-    let mat = DB.materias.find(x=>x.clave===m.clave);
+    // Buscar por clave Y semestre (evita mezclar con una materia homónima de otro semestre)
+    let mat = DB.materias.find(x=>x.clave===m.clave && x.semestre===m.semestre);
     const rubros = (m.rubros&&m.rubros.length)?m.rubros:[{nombre:'Examen',peso:40},{nombre:'Trabajos',peso:35},{nombre:'Participación',peso:25}];
     if(mat){ mat.docenteId=doc.id; if(m.horasSemana)mat.horasSemana=m.horasSemana; if(m.sesionesSemana)mat.sesionesSemana=m.sesionesSemana; cambios.push(mat); }
     else { mat={id:uid(), clave:m.clave, nombre:m.nombre, semestre:m.semestre,
@@ -831,7 +832,7 @@ function importarRegistroDocente(data){
   if(!data || !data.docente || !Array.isArray(data.materias)){ toast('El archivo no tiene el formato esperado.'); return; }
   const d = data.docente;
   const previa = data.materias.map(m=>{
-    const existe = DB.materias.some(x=>x.clave===m.clave);
+    const existe = DB.materias.some(x=>x.clave===m.clave && x.semestre===m.semestre);
     return `<tr><td class="mono">${esc(m.clave)}</td><td>${esc(m.nombre)}</td>
       <td style="text-align:center">${m.semestre}</td><td style="text-align:center">${esc(m.grupos||'—')}</td>
       <td style="text-align:center">${m.sesionesSemana||0}</td>
@@ -857,7 +858,7 @@ function importarRegistroDocente(data){
       // 2) Materias: crear nuevas o vincular existentes
       const cambios = [];
       data.materias.forEach(m=>{
-        let mat = DB.materias.find(x=>x.clave===m.clave);
+        let mat = DB.materias.find(x=>x.clave===m.clave && x.semestre===m.semestre);
         const rubros = (m.rubros&&m.rubros.length)?m.rubros:[{nombre:'Examen',peso:40},{nombre:'Trabajos',peso:35},{nombre:'Participación',peso:25}];
         if(mat){ mat.docenteId=doc.id; if(m.horasSemana)mat.horasSemana=m.horasSemana; if(m.sesionesSemana)mat.sesionesSemana=m.sesionesSemana; cambios.push(mat); }
         else { mat={id:uid(), clave:m.clave, nombre:m.nombre, semestre:m.semestre,
@@ -1415,14 +1416,21 @@ function modalArmarPlantel(){
 
       const diasDoc = {}; // docId -> Set(diaIndex) usados
 
-      // Ordenar demandas: 1) Cultura Digital, 2) docentes con día de descanso (colocan
-      // primero, mientras hay espacio para respetar su día libre), 3) más grupos, 4) más sesiones
+      // Ordenar demandas para un armado que concentre los días de cada docente:
+      // 1) Cultura Digital primero (prioridad institucional)
+      // 2) AGRUPAR por docente (todas sus materias juntas, así se concentran sus días)
+      // 3) dentro del docente, los de más carga primero
       demandas.sort((a,b)=>{
         if(esCultura(a.materia)!==esCultura(b.materia)) return esCultura(a.materia)?-1:1;
         const da = diaDescanso[a.materia.docenteId]!=null?1:0, db = diaDescanso[b.materia.docenteId]!=null?1:0;
         if(da!==db) return db-da;
-        const ca = cargaDocente[a.materia.docenteId]||0, cb = cargaDocente[b.materia.docenteId]||0;
-        if(ca!==cb) return cb-ca;
+        // Agrupar por docente: mismas materias del mismo maestro seguidas
+        const docA = a.materia.docenteId||'zzz', docB = b.materia.docenteId||'zzz';
+        if(docA!==docB){
+          const ca = cargaTotalDoc[a.materia.docenteId]||0, cb = cargaTotalDoc[b.materia.docenteId]||0;
+          if(ca!==cb) return cb-ca;             // docentes más cargados primero
+          return docA.localeCompare(docB);       // desempate estable por id
+        }
         return (b.materia.sesionesSemana||0)-(a.materia.sesionesSemana||0);
       });
 
@@ -1442,14 +1450,18 @@ function modalArmarPlantel(){
           if(!candidatos.length){ sinLugar.push(`${m.nombre} (${g.nombre})`); continue; }
 
           candidatos.sort((a,b)=>{
-            if(a.esDiaLibre!==b.esDiaLibre) return a.esDiaLibre-b.esDiaLibre; // 1) evitar día libre
-            if(m.prioridadTemprana){ if(a.bi!==b.bi) return a.bi-b.bi; }       // 2) prioridad temprana
-            if(pocaCarga){ if(a.repetido!==b.repetido) return b.repetido-a.repetido; } // 3) poca carga: concentrar
-            else { if(a.repetido!==b.repetido) return a.repetido-b.repetido; }         //    resto: repartir
-            // 4) COMPACIDAD: minimizar huecos del docente (menos ventanas muertas)
+            if(a.esDiaLibre!==b.esDiaLibre) return a.esDiaLibre-b.esDiaLibre; // 1) evitar día de descanso
+            if(m.prioridadTemprana){ if(a.bi!==b.bi) return a.bi-b.bi; }       // 2) prioridad primeras horas
+            // 3) NO repetir la MISMA materia dos veces el mismo día en el MISMO grupo
+            //    (esto es a nivel grupo+materia; evita 2 clases de lo mismo seguidas)
+            if(a.repetido!==b.repetido) return a.repetido-b.repetido;
+            // 4) CONCENTRAR LOS DÍAS DEL DOCENTE: preferir días donde el docente YA trabaja,
+            //    para que no termine dando clases los 5 días. Este es el arreglo clave.
+            if(a.docTrabajaEseDia!==b.docTrabajaEseDia) return b.docTrabajaEseDia-a.docTrabajaEseDia;
+            // 5) COMPACIDAD: dentro del día, minimizar huecos del docente
             if(a.huecoDoc!==b.huecoDoc) return a.huecoDoc-b.huecoDoc;
-            if(a.adyacente!==b.adyacente) return b.adyacente-a.adyacente; // preferir pegado a otra clase
-            // 5) balancear carga diaria del grupo
+            if(a.adyacente!==b.adyacente) return b.adyacente-a.adyacente;
+            // 6) balancear carga diaria del grupo
             return a.carga-b.carga;
           });
 
@@ -1478,11 +1490,12 @@ function modalArmarPlantel(){
               // ── COMPACIDAD DEL DOCENTE ──
               // Calcular el "hueco" que este bloque generaría en el día del docente.
               // Si el docente ya tiene clases ese día, preferimos bloques contiguos.
-              let huecoDoc = 0, adyacente = 0;
+              let huecoDoc = 0, adyacente = 0, docTrabajaEseDia = 0;
               if(docId && ocupDoc[docId]){
                 const filaDoc = ocupDoc[docId][di];
                 const ocupados = filaDoc.map((x,i)=>x?i:-1).filter(i=>i>=0);
                 if(ocupados.length){
+                  docTrabajaEseDia = 1; // el docente ya tiene clase(s) este día
                   // ¿El bloque candidato es adyacente a una clase existente?
                   if(filaDoc[bi-1] || filaDoc[bi+1]) adyacente = 1;
                   // Hueco = distancia al bloque ocupado más cercano, menos 1 (0 = pegado)
@@ -1490,7 +1503,7 @@ function modalArmarPlantel(){
                   huecoDoc = Math.max(0, distMin-1);
                 }
               }
-              out.push({di, bi, carga:cargaGrupo, repetido, esDiaLibre, huecoDoc, adyacente});
+              out.push({di, bi, carga:cargaGrupo, repetido, esDiaLibre, huecoDoc, adyacente, docTrabajaEseDia});
             });
           });
           return out;
@@ -3023,6 +3036,18 @@ function vistaAuditor(el){
     const todosHorarios = DB.horarios;
     const problemas = [], avisos = [], info = [];
 
+    // ── 0. Materias duplicadas (misma clave y semestre repetidos) ──
+    const porClaveSem = {};
+    DB.materias.forEach(m=>{
+      if(!m.clave) return;
+      const k = m.clave+'|'+m.semestre;
+      (porClaveSem[k]=porClaveSem[k]||[]).push(m);
+    });
+    Object.values(porClaveSem).filter(lst=>lst.length>1).forEach(lst=>{
+      const nombres = lst.map(m=>`${esc(docente(m.docenteId)?.nombre||'sin docente')} (${DB.horarios.filter(h=>h.materiaId===m.id).length} clases)`);
+      problemas.push(`🔴 <strong>Materia duplicada:</strong> "${esc(lst[0].nombre)}" (${esc(lst[0].clave)}, ${lst[0].semestre}° sem.) existe <strong>${lst.length} veces</strong> en el sistema: ${nombres.join(' · ')}. Esto duplica sus clases en el horario. Ve a Materias y rubros y elimina las copias sobrantes.`);
+    });
+
     // ── 1. Choques de docente entre grupos ──
     const mapaDocDia = {}; // docenteId|dia|hi → [grupoId, materiaId]
     grupos.forEach(g=>{
@@ -3143,7 +3168,7 @@ function tablaCargaHoraria(ciclo){
           <th>Total h/sem</th><th>Días</th><th>Huecos</th><th>Estado</th></tr></thead>
         <tbody>
         ${cargaData.map(cd=>`<tr>
-          <td style="text-align:left"><strong>${esc(cd.docente.nombre)}</strong></td>
+          <td style="text-align:left"><a href="#" class="verDesglose" data-doc="${cd.docente.id}" style="color:var(--azul-500);text-decoration:none;font-weight:600">${esc(cd.docente.nombre)}</a></td>
           ${DIAS.map(dia=>{
             const cls = cd.porDia[dia];
             const bloqueCount = {};
@@ -3164,13 +3189,47 @@ function tablaCargaHoraria(ciclo){
       </table></div>
     </div>`;
   $('#auResultados').innerHTML = html;
+  $('#auResultados').querySelectorAll('.verDesglose').forEach(a=>a.addEventListener('click', e=>{
+    e.preventDefault(); desgloseMateriasDocente(a.dataset.doc, ciclo);
+  }));
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   AJUSTE AUTOMÁTICO
-   Detecta duplicados de docente (mismo bloque, dos grupos) y los reubica
-   automáticamente a un hueco libre, respetando grupo y docente.
-   ═══════════════════════════════════════════════════════════════════════ */
+/* Muestra qué materias tiene asignadas un docente y cuántas clases genera cada una */
+function desgloseMateriasDocente(docId, ciclo){
+  const d = docente(docId);
+  const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
+  const gids = new Set(grupos.map(g=>g.id));
+  const susMaterias = DB.materias.filter(m=>m.docenteId===docId);
+
+  const filas = susMaterias.map(m=>{
+    const clasesReales = DB.horarios.filter(h=>gids.has(h.grupoId)&&h.materiaId===m.id).length;
+    const gruposConEsta = [...new Set(DB.horarios.filter(h=>gids.has(h.grupoId)&&h.materiaId===m.id).map(h=>grupo(h.grupoId)?.nombre))].filter(Boolean);
+    return `<tr>
+      <td class="mono">${esc(m.clave||'—')}</td>
+      <td>${esc(m.nombre)}</td>
+      <td style="text-align:center">${m.semestre}°</td>
+      <td style="text-align:center">${m.sesionesSemana||0}</td>
+      <td style="text-align:center"><strong>${clasesReales}</strong></td>
+      <td style="font-size:.78rem">${esc(gruposConEsta.join(', ')||'sin horario')}</td>
+    </tr>`;
+  }).join('');
+
+  const totalClases = DB.horarios.filter(h=>gids.has(h.grupoId)&&materia(h.materiaId)?.docenteId===docId).length;
+
+  abrirModal(`📋 Materias de ${esc(d?.nombre||'')}`, `
+    <p class="muted">Estas son <strong>todas</strong> las materias asignadas a este docente y las clases que generan en el horario. Si ves materias que no le corresponden, edítalas en «Materias y rubros» y cámbiales el docente.</p>
+    <div class="table-wrap" style="margin-top:.7rem;max-height:340px;overflow-y:auto"><table style="font-size:.83rem">
+      <thead><tr><th>Clave</th><th>Materia</th><th>Sem.</th><th>Ses/sem</th><th>Clases</th><th>Grupos</th></tr></thead>
+      <tbody>${filas||'<tr><td colspan="6" class="muted" style="text-align:center;padding:1rem">Sin materias asignadas.</td></tr>'}</tbody>
+      <tfoot><tr style="border-top:2px solid var(--gris-300);font-weight:700">
+        <td colspan="4" style="text-align:right">Total de clases en el horario:</td>
+        <td style="text-align:center">${totalClases}</td><td></td></tr></tfoot>
+    </table></div>
+    <div class="aviso-box" style="background:var(--azul-100);border-radius:8px;padding:.6rem .8rem;font-size:.83rem;margin-top:.7rem">💡 El «Total h/sem» de la tabla es la suma de la columna «Clases». Si es mayor de lo esperado, este desglose te muestra exactamente qué materias lo componen.</div>
+    <div class="modal-foot"><button class="btn btn-primary" id="dmCerrar">Cerrar</button></div>`,
+  body=>body.querySelector('#dmCerrar').addEventListener('click', cerrarModal));
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    BALANCEO DE CARGA DOCENTE
    Detecta docentes con carga > 28h (sin día libre posible) y propone pasar
