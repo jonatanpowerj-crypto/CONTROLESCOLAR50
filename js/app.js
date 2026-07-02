@@ -1221,7 +1221,8 @@ function vistaHorarios(el){
     ${!esAdmin()?'<button class="btn btn-outline" id="miHorario">📅 Mi horario semanal</button>':''}
     <button class="btn btn-outline" id="horPDF">🧾 Exportar PDF</button>
     ${esAdmin()?`<button class="btn btn-gold" id="armarHorario">🪄 Armar este grupo</button>
-    <button class="btn btn-danger" id="armarPlantel" style="background:var(--azul-900)">🏫 Armar TODO el plantel</button>`:''}
+    <button class="btn btn-danger" id="armarPlantel" style="background:var(--azul-900)">🏫 Armar TODO el plantel</button>
+    <button class="btn btn-danger" id="borrarPlantel">🗑️ Borrar horario completo</button>`:''}
     <button class="btn btn-primary" id="nuevoHor">＋ Agregar clase</button>
   </div>
   <div id="horZona"></div>`;
@@ -1229,6 +1230,7 @@ function vistaHorarios(el){
   $('#horSel').addEventListener('change', e=>{ horGrupo=e.target.value; pintar(); });
   if(esAdmin()) $('#armarHorario').addEventListener('click', ()=>modalArmarHorario());
   if(esAdmin()) $('#armarPlantel')?.addEventListener('click', ()=>modalArmarPlantel());
+  if(esAdmin()) $('#borrarPlantel')?.addEventListener('click', ()=>modalBorrarHorarioCompleto());
   if(!esAdmin()) $('#miHorario')?.addEventListener('click', ()=>modalMiHorario());
   $('#horPDF').addEventListener('click', ()=>exportarHorarioPDF(esAdmin()?horGrupo:null));
   $('#nuevoHor').addEventListener('click', ()=>{
@@ -1590,41 +1592,42 @@ function modalArmarPlantel(){
 
       // ═══ TERCERA PASADA: COMPACTACIÓN (eliminar horas hueco del docente) ═══
       // Para cada docente y cada día, si tiene clases separadas por huecos,
-      // intenta deslizar las clases aisladas hacia bloques contiguos a sus otras
-      // clases del mismo día (moviendo dentro del mismo día, sin crear choques).
+      // intenta deslizar CUALQUIERA de sus clases de ese día hacia el hueco,
+      // no solo la última — así se resuelven casos donde la última clase no
+      // puede moverse pero otra sí, dejando el día realmente compacto.
       const bloquesClase = BLOQUES_P50.filter(b=>!b.receso);
       Object.keys(ocupDoc).forEach(docId=>{
         DIAS.forEach((d,di)=>{
           let intentos = 0;
           let mejora = true;
-          while(mejora && intentos<bloquesClase.length){
+          while(mejora && intentos<bloquesClase.length*2){
             mejora = false; intentos++;
             const fila = ocupDoc[docId][di];
             const ocupados = fila.map((x,i)=>x?i:-1).filter(i=>i>=0);
             if(ocupados.length<2) break; // 0 o 1 clase: no hay huecos que cerrar
             const primero = ocupados[0], ultimo = ocupados[ocupados.length-1];
-            // Buscar un hueco entre la primera y la última clase
-            for(let bi=primero; bi<=ultimo; bi++){
+            for(let bi=primero; bi<=ultimo && !mejora; bi++){
               if(fila[bi]) continue; // ya ocupado, no es hueco
-              // Hay un hueco en bi. Intentar traer la clase más lejana hacia aquí.
-              // Tomamos la última clase del día y la movemos al hueco, si el grupo lo permite.
-              const gIdUlt = fila[ultimo];
-              if(!gIdUlt) break;
-              // ¿El grupo de esa clase tiene libre el bloque del hueco?
-              if(ocupGrupo[gIdUlt][di][bi]) continue;
-              // Buscar la propuesta correspondiente a mover
-              const pMover = propuestaGlobal.find(x=>x.grupoId===gIdUlt && DIAS.indexOf(x.dia)===di
-                && x.hi===bloquesClase[ultimo].hi && materia(x.materiaId)?.docenteId===docId);
-              if(!pMover) continue;
-              // Ejecutar el movimiento: ultimo → bi
-              ocupGrupo[gIdUlt][di][ultimo] = null;
-              ocupDoc[docId][di][ultimo] = null;
-              ocupGrupo[gIdUlt][di][bi] = pMover.materiaId;
-              ocupDoc[docId][di][bi] = gIdUlt;
-              pMover.hi = bloquesClase[bi].hi;
-              pMover.hf = bloquesClase[bi].hf;
-              mejora = true;
-              break;
+              // Hay un hueco en bi. Probar TODAS las clases posteriores al hueco
+              // (de la más lejana a la más cercana, para maximizar la compactación).
+              const candidatasAMover = ocupados.filter(o=>o>bi).sort((a,b)=>b-a);
+              for(const origen of candidatasAMover){
+                const gIdOrigen = fila[origen];
+                if(!gIdOrigen) continue;
+                if(ocupGrupo[gIdOrigen][di][bi]) continue; // el grupo ya ocupa ese hueco, probar otra clase
+                const pMover = propuestaGlobal.find(x=>x.grupoId===gIdOrigen && DIAS.indexOf(x.dia)===di
+                  && x.hi===bloquesClase[origen].hi && materia(x.materiaId)?.docenteId===docId);
+                if(!pMover) continue;
+                // Ejecutar el movimiento: origen → bi
+                ocupGrupo[gIdOrigen][di][origen] = null;
+                ocupDoc[docId][di][origen] = null;
+                ocupGrupo[gIdOrigen][di][bi] = pMover.materiaId;
+                ocupDoc[docId][di][bi] = gIdOrigen;
+                pMover.hi = bloquesClase[bi].hi;
+                pMover.hf = bloquesClase[bi].hf;
+                mejora = true;
+                break;
+              }
             }
           }
         });
@@ -1678,6 +1681,43 @@ function modalArmarPlantel(){
       persist('horarios', nuevos);
       cerrarModal(); render();
       toast(`Horario del plantel armado: ${nuevos.length} clases en ${grupos.length} grupos, sin choques de docente.${reiniciar&&existentes.length?` (${existentes.length} clases previas reemplazadas)`:''}`);
+    });
+  });
+}
+
+/* Borra TODAS las clases del horario de un ciclo, para empezar de cero */
+function modalBorrarHorarioCompleto(){
+  const ciclosConGrupos = [...new Set(DB.grupos.map(g=>g.ciclo).filter(Boolean))];
+  const cicloDefault = DB.plantel.ciclo || ciclosConGrupos[0] || cicloActualAuto();
+
+  abrirModal('🗑️ Borrar horario completo', `
+    <p class="muted">Esta acción elimina <strong>todas las clases</strong> del horario de los grupos del ciclo seleccionado, dejándolos vacíos para volver a armarlos desde cero. No afecta docentes, materias, grupos ni alumnos — solo el horario.</p>
+    <div class="field" style="margin-top:.7rem"><label>Ciclo a borrar</label>
+      <select id="bhCiclo">${listaCiclos().map(c=>`<option ${c===cicloDefault?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div id="bhAviso" style="margin-top:.6rem"></div>
+    <div class="modal-foot"><button class="btn btn-outline" id="bhCan">Cancelar</button>
+    <button class="btn btn-danger" id="bhOk">Borrar horario de este ciclo</button></div>`,
+  body=>{
+    const actualizarAviso = ()=>{
+      const ciclo = body.querySelector('#bhCiclo').value;
+      const gids = new Set(DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo).map(g=>g.id));
+      const n = DB.horarios.filter(h=>gids.has(h.grupoId)).length;
+      body.querySelector('#bhAviso').innerHTML = `<p class="tag ${n?'tag-mal':'tag-ok'}">${n} clase(s) serán eliminadas.</p>`;
+    };
+    actualizarAviso();
+    body.querySelector('#bhCiclo').addEventListener('change', actualizarAviso);
+    body.querySelector('#bhCan').addEventListener('click', cerrarModal);
+    body.querySelector('#bhOk').addEventListener('click', ()=>{
+      const ciclo = body.querySelector('#bhCiclo').value;
+      const gids = new Set(DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo).map(g=>g.id));
+      const aBorrar = DB.horarios.filter(h=>gids.has(h.grupoId));
+      if(!aBorrar.length){ toast('No hay clases que borrar en este ciclo.'); cerrarModal(); return; }
+      if(!confirm(`Se eliminarán ${aBorrar.length} clases del ciclo ${ciclo}. Esta acción NO se puede deshacer. ¿Continuar?`)) return;
+      const ids = new Set(aBorrar.map(h=>h.id));
+      DB.horarios = DB.horarios.filter(h=>!ids.has(h.id));
+      persistDel('horarios', [...ids]);
+      cerrarModal(); render();
+      toast(`${aBorrar.length} clase(s) eliminada(s). Usa «Armar TODO el plantel» para crear el horario de nuevo.`);
     });
   });
 }
