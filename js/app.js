@@ -1378,63 +1378,78 @@ function modalArmarPlantel(){
         body.querySelector('#hpPreview').innerHTML = '<p class="tag tag-aviso">Ninguna materia tiene «Sesiones por semana» configuradas. Ve a Materias y rubros y defínelas antes de continuar.</p>';
         body.querySelector('#hpOk').disabled = true; return;
       }
-      // Prioridad: 1) Cultura Digital, 2) materias con docente ya muy ocupado (más grupos a la vez), 3) más sesiones
-      const cargaDocente = {};
-      demandas.forEach(d=>{ const did=d.materia.docenteId; if(did) cargaDocente[did]=(cargaDocente[did]||0)+1; });
-      demandas.sort((a,b)=>{
-        if(esCultura(a.materia)!==esCultura(b.materia)) return esCultura(a.materia)?-1:1;
-        const ca = cargaDocente[a.materia.docenteId]||0, cb = cargaDocente[b.materia.docenteId]||0;
-        if(ca!==cb) return cb-ca;
-        return (b.materia.sesionesSemana||0)-(a.materia.sesionesSemana||0);
-      });
 
       propuestaGlobal = [];
       const sinLugar = [];
       const diasUsadosPorGM = {}; // clave grupo|materia -> [dias]
 
-      // Carga total por docente (para regla de día de descanso)
+      // Carga total por docente (sesiones/semana) — se calcula ANTES de ordenar y asignar descanso
       const cargaTotalDoc = {};
       demandas.forEach(({materia:m})=>{ if(m.docenteId) cargaTotalDoc[m.docenteId]=(cargaTotalDoc[m.docenteId]||0)+(m.sesionesSemana||1); });
-      // Días en que cada docente ya tiene clase (para intentar dejarle uno libre)
-      const diasDoc = {}; // docId -> Set(diaIndex)
+      const cargaDocente = {}; // nº de (grupo,materia) por docente
+      demandas.forEach(d=>{ const did=d.materia.docenteId; if(did) cargaDocente[did]=(cargaDocente[did]||0)+1; });
+
+      // ── DÍA DE DESCANSO PROACTIVO (con reparto equilibrado) ──
+      // Cada docente cuya carga quepa en 4 días recibe 1 día libre. Para que las
+      // reservas de distintos docentes no se saturen en los mismos grupos, se
+      // reparten los días de descanso de forma balanceada (round-robin ponderado):
+      // se cuenta cuántos docentes ya descansan cada día y se elige el menos usado.
+      const NB = bloques.length;                 // 7 bloques de clase por día
+      const capacidad4dias = NB * 4;             // 28
+      const diaDescanso = {};                    // docId -> diaIndex prohibido
+      const descansosPorDia = DIAS.map(()=>0);   // cuántos docentes descansan cada día
+
+      // Procesar docentes de MAYOR a menor carga: los más cargados eligen primero
+      const docentesOrdenados = Object.keys(cargaTotalDoc)
+        .filter(d=>cargaTotalDoc[d]>0 && cargaTotalDoc[d]<=capacidad4dias)
+        .sort((a,b)=>cargaTotalDoc[b]-cargaTotalDoc[a]);
+
+      docentesOrdenados.forEach(docId=>{
+        // Grupos donde este docente da clase
+        const gruposDoc = new Set(demandas.filter(d=>d.materia.docenteId===docId).map(d=>d.grupo.id));
+        // Elegir el día con MENOS descansos ya asignados (equilibrio del plantel)
+        const orden = DIAS.map((d,di)=>({di, usados:descansosPorDia[di]})).sort((a,b)=>a.usados-b.usados);
+        diaDescanso[docId] = orden[0].di;
+        descansosPorDia[orden[0].di]++;
+      });
+
+      const diasDoc = {}; // docId -> Set(diaIndex) usados
+
+      // Ordenar demandas: 1) Cultura Digital, 2) docentes con día de descanso (colocan
+      // primero, mientras hay espacio para respetar su día libre), 3) más grupos, 4) más sesiones
+      demandas.sort((a,b)=>{
+        if(esCultura(a.materia)!==esCultura(b.materia)) return esCultura(a.materia)?-1:1;
+        const da = diaDescanso[a.materia.docenteId]!=null?1:0, db = diaDescanso[b.materia.docenteId]!=null?1:0;
+        if(da!==db) return db-da;
+        const ca = cargaDocente[a.materia.docenteId]||0, cb = cargaDocente[b.materia.docenteId]||0;
+        if(ca!==cb) return cb-ca;
+        return (b.materia.sesionesSemana||0)-(a.materia.sesionesSemana||0);
+      });
 
       demandas.forEach(({grupo:g, materia:m})=>{
         const ses = m.sesionesSemana||1;
         const docId = m.docenteId;
         const claveGM = g.id+'|'+m.id;
         diasUsadosPorGM[claveGM] = diasUsadosPorGM[claveGM] || [];
-        // ¿Materia de poca carga? (1-2 sesiones) → concentrar en menos días
         const pocaCarga = ses<=2;
-        // ¿Docente con carga grande? (>20 sesiones/sem) → merece un día de descanso
-        const cargaGrande = (cargaTotalDoc[docId]||0) > 20;
+        const diaLibre = (docId!=null) ? diaDescanso[docId] : undefined;
 
         for(let s=0; s<ses; s++){
-          const candidatos = [];
-          DIAS.forEach((d,di)=>{
-            bloques.forEach((b,bi)=>{
-              if(ocupGrupo[g.id][di][bi]) return;                            // grupo ocupado
-              if(docId && ocupDoc[docId] && ocupDoc[docId][di][bi]) return;  // docente ocupado en otro grupo
-              const cargaGrupo = ocupGrupo[g.id][di].filter(x=>x).length;
-              const repetido = diasUsadosPorGM[claveGM].includes(di);
-              // Regla día de descanso: si el docente tiene carga grande y este día
-              // aún no lo usa, y ya usa 4+ días, penalizamos abrir un 5º día.
-              const diasDelDoc = diasDoc[docId] ? diasDoc[docId].size : 0;
-              const abririaNuevoDia = docId && diasDoc[docId] && !diasDoc[docId].has(di);
-              const penalDescanso = (cargaGrande && abririaNuevoDia && diasDelDoc>=4) ? 100 : 0;
-              candidatos.push({di, bi, carga:cargaGrupo, repetido, penalDescanso});
-            });
-          });
+          // Primer intento: respetando el día de descanso (excluyéndolo)
+          let candidatos = construirCandidatos(true);
+          // Si no hay lugar respetando el descanso, reintentar sin esa restricción
+          if(!candidatos.length) candidatos = construirCandidatos(false);
           if(!candidatos.length){ sinLugar.push(`${m.nombre} (${g.nombre})`); continue; }
 
           candidatos.sort((a,b)=>{
-            // 1) Evitar quitarle el día de descanso al docente con carga grande
-            if(a.penalDescanso!==b.penalDescanso) return a.penalDescanso-b.penalDescanso;
-            // 2) Prioridad temprana: materias marcadas van a los primeros bloques
-            if(m.prioridadTemprana){ if(a.bi!==b.bi) return a.bi-b.bi; }
-            // 3) Poca carga: concentrar en días ya usados por esta materia (menos días)
-            if(pocaCarga){ if(a.repetido!==b.repetido) return b.repetido-a.repetido; }
-            else { if(a.repetido!==b.repetido) return a.repetido-b.repetido; } // resto: repartir
-            // 4) Balancear carga diaria del grupo
+            if(a.esDiaLibre!==b.esDiaLibre) return a.esDiaLibre-b.esDiaLibre; // 1) evitar día libre
+            if(m.prioridadTemprana){ if(a.bi!==b.bi) return a.bi-b.bi; }       // 2) prioridad temprana
+            if(pocaCarga){ if(a.repetido!==b.repetido) return b.repetido-a.repetido; } // 3) poca carga: concentrar
+            else { if(a.repetido!==b.repetido) return a.repetido-b.repetido; }         //    resto: repartir
+            // 4) COMPACIDAD: minimizar huecos del docente (menos ventanas muertas)
+            if(a.huecoDoc!==b.huecoDoc) return a.huecoDoc-b.huecoDoc;
+            if(a.adyacente!==b.adyacente) return b.adyacente-a.adyacente; // preferir pegado a otra clase
+            // 5) balancear carga diaria del grupo
             return a.carga-b.carga;
           });
 
@@ -1449,19 +1464,167 @@ function modalArmarPlantel(){
           diasUsadosPorGM[claveGM].push(di);
           propuestaGlobal.push({materiaId:m.id, grupoId:g.id, dia:DIAS[di], hi:bloques[bi].hi, hf:bloques[bi].hf, aula:''});
         }
+
+        function construirCandidatos(respetarDescanso){
+          const out = [];
+          DIAS.forEach((d,di)=>{
+            if(respetarDescanso && diaLibre===di) return; // saltar el día de descanso
+            bloques.forEach((b,bi)=>{
+              if(ocupGrupo[g.id][di][bi]) return;
+              if(docId && ocupDoc[docId] && ocupDoc[docId][di][bi]) return;
+              const cargaGrupo = ocupGrupo[g.id][di].filter(x=>x).length;
+              const repetido = diasUsadosPorGM[claveGM].includes(di);
+              const esDiaLibre = (diaLibre===di) ? 1 : 0;
+              // ── COMPACIDAD DEL DOCENTE ──
+              // Calcular el "hueco" que este bloque generaría en el día del docente.
+              // Si el docente ya tiene clases ese día, preferimos bloques contiguos.
+              let huecoDoc = 0, adyacente = 0;
+              if(docId && ocupDoc[docId]){
+                const filaDoc = ocupDoc[docId][di];
+                const ocupados = filaDoc.map((x,i)=>x?i:-1).filter(i=>i>=0);
+                if(ocupados.length){
+                  // ¿El bloque candidato es adyacente a una clase existente?
+                  if(filaDoc[bi-1] || filaDoc[bi+1]) adyacente = 1;
+                  // Hueco = distancia al bloque ocupado más cercano, menos 1 (0 = pegado)
+                  const distMin = Math.min(...ocupados.map(o=>Math.abs(o-bi)));
+                  huecoDoc = Math.max(0, distMin-1);
+                }
+              }
+              out.push({di, bi, carga:cargaGrupo, repetido, esDiaLibre, huecoDoc, adyacente});
+            });
+          });
+          return out;
+        }
       });
 
-      // Resumen por grupo + detección de huecos de docentes (verificación cruzada)
+      // ═══ SEGUNDA PASADA: CONSOLIDACIÓN DE DÍA DE DESCANSO ═══
+      // Tras el armado, algunos docentes pueden haber quedado en 5 días aunque
+      // su carga cabría en 4. Esta fase intenta vaciar su día menos cargado
+      // moviendo esas clases a huecos de sus otros días (sin crear choques).
+      const liberados = [];
+      Object.keys(cargaTotalDoc).forEach(docId=>{
+        if(!ocupDoc[docId]) return;
+        if(cargaTotalDoc[docId] > capacidad4dias) return; // imposible, se salta
+        let diasTrab = DIAS.map((d,di)=>di).filter(di=>ocupDoc[docId][di].some(x=>x));
+        if(diasTrab.length < 5) return; // ya descansa, nada que hacer
+
+        // Elegir el día con MENOS clases del docente como candidato a vaciar
+        const cargaPorDia = diasTrab.map(di=>({di, n:ocupDoc[docId][di].filter(x=>x).length}))
+          .sort((a,b)=>a.n-b.n);
+        const diaVaciar = cargaPorDia[0].di;
+
+        // Clases del docente ese día (con su grupo y bloque)
+        const clasesEseDia = [];
+        bloques.forEach((b,bi)=>{
+          const gId = ocupDoc[docId][diaVaciar][bi];
+          if(gId){ const p = propuestaGlobal.find(x=>x.grupoId===gId && DIAS.indexOf(x.dia)===diaVaciar && x.hi===b.hi
+            && materia(x.materiaId)?.docenteId===docId);
+            if(p) clasesEseDia.push({p, bi, gId}); }
+        });
+
+        // Intentar reubicar cada clase a otro día (no el que vaciamos), respetando grupo y docente
+        const movimientos = [];
+        let todasMovibles = true;
+        // Copias de trabajo para simular sin dañar el estado si falla
+        clasesEseDia.forEach(({p, gId})=>{
+          let ubicado = null;
+          for(const di of diasTrab){
+            if(di===diaVaciar) continue;
+            for(let bi=0; bi<bloques.length; bi++){
+              if(ocupGrupo[gId][di][bi]) continue;
+              if(ocupDoc[docId][di][bi]) continue;
+              // evitar que dos movimientos pisen el mismo hueco
+              if(movimientos.some(mv=>mv.gId===gId && mv.di===di && mv.bi===bi)) continue;
+              if(movimientos.some(mv=>mv.di===di && mv.bi===bi && mv.docBloqueo)) continue;
+              ubicado = {di, bi}; break;
+            }
+            if(ubicado) break;
+          }
+          if(ubicado){ movimientos.push({p, gId, di:ubicado.di, bi:ubicado.bi, docBloqueo:true,
+            biOrig:bloques.findIndex(b=>b.hi===p.hi)}); }
+          else todasMovibles = false;
+        });
+
+        // Solo aplicar si TODAS las clases del día pudieron reubicarse
+        if(todasMovibles && movimientos.length){
+          movimientos.forEach(mv=>{
+            // liberar posición vieja
+            ocupGrupo[mv.gId][diaVaciar][mv.biOrig] = null;
+            ocupDoc[docId][diaVaciar][mv.biOrig] = null;
+            // ocupar nueva
+            ocupGrupo[mv.gId][mv.di][mv.bi] = mv.p.materiaId;
+            ocupDoc[docId][mv.di][mv.bi] = mv.gId;
+            // actualizar la propuesta
+            mv.p.dia = DIAS[mv.di];
+            mv.p.hi = bloques[mv.bi].hi;
+            mv.p.hf = BLOQUES_P50.filter(b=>!b.receso)[mv.bi].hf;
+          });
+          liberados.push(docId);
+        }
+      });
+
+      // ═══ TERCERA PASADA: COMPACTACIÓN (eliminar horas hueco del docente) ═══
+      // Para cada docente y cada día, si tiene clases separadas por huecos,
+      // intenta deslizar las clases aisladas hacia bloques contiguos a sus otras
+      // clases del mismo día (moviendo dentro del mismo día, sin crear choques).
+      const bloquesClase = BLOQUES_P50.filter(b=>!b.receso);
+      Object.keys(ocupDoc).forEach(docId=>{
+        DIAS.forEach((d,di)=>{
+          let intentos = 0;
+          let mejora = true;
+          while(mejora && intentos<bloquesClase.length){
+            mejora = false; intentos++;
+            const fila = ocupDoc[docId][di];
+            const ocupados = fila.map((x,i)=>x?i:-1).filter(i=>i>=0);
+            if(ocupados.length<2) break; // 0 o 1 clase: no hay huecos que cerrar
+            const primero = ocupados[0], ultimo = ocupados[ocupados.length-1];
+            // Buscar un hueco entre la primera y la última clase
+            for(let bi=primero; bi<=ultimo; bi++){
+              if(fila[bi]) continue; // ya ocupado, no es hueco
+              // Hay un hueco en bi. Intentar traer la clase más lejana hacia aquí.
+              // Tomamos la última clase del día y la movemos al hueco, si el grupo lo permite.
+              const gIdUlt = fila[ultimo];
+              if(!gIdUlt) break;
+              // ¿El grupo de esa clase tiene libre el bloque del hueco?
+              if(ocupGrupo[gIdUlt][di][bi]) continue;
+              // Buscar la propuesta correspondiente a mover
+              const pMover = propuestaGlobal.find(x=>x.grupoId===gIdUlt && DIAS.indexOf(x.dia)===di
+                && x.hi===bloquesClase[ultimo].hi && materia(x.materiaId)?.docenteId===docId);
+              if(!pMover) continue;
+              // Ejecutar el movimiento: ultimo → bi
+              ocupGrupo[gIdUlt][di][ultimo] = null;
+              ocupDoc[docId][di][ultimo] = null;
+              ocupGrupo[gIdUlt][di][bi] = pMover.materiaId;
+              ocupDoc[docId][di][bi] = gIdUlt;
+              pMover.hi = bloquesClase[bi].hi;
+              pMover.hf = bloquesClase[bi].hf;
+              mejora = true;
+              break;
+            }
+          }
+        });
+      });
+
       const porGrupo = {};
       propuestaGlobal.forEach(p=>{ porGrupo[p.grupoId]=(porGrupo[p.grupoId]||0)+1; });
       const filasResumen = grupos.map(g=>`<tr><td>${esc(g.nombre)}</td><td style="text-align:center">${porGrupo[g.id]||0}</td></tr>`).join('');
 
+      let conDescanso=0, sinDescansoPosible=0;
+      Object.keys(cargaTotalDoc).forEach(docId=>{
+        if(!ocupDoc[docId]) return;
+        const dt = DIAS.filter((d,di)=>ocupDoc[docId][di].some(x=>x)).length;
+        if(dt<5) conDescanso++;
+        else if(cargaTotalDoc[docId]>capacidad4dias) sinDescansoPosible++;
+      });
+
       let html = `<div class="grid grid-2">
         <div class="card"><h3 style="font-size:.95rem">📊 Resumen por grupo</h3>
           <div class="table-wrap"><table><thead><tr><th>Grupo</th><th>Clases asignadas</th></tr></thead><tbody>${filasResumen}</tbody></table></div></div>
-        <div class="card"><h3 style="font-size:.95rem">✅ Verificación de choques</h3>
-          <p style="margin-top:.4rem"><span class="tag tag-ok">0 choques de docente</span> — cada maestro queda en un solo grupo por bloque, garantizado por el algoritmo.</p>
-          <p class="muted" style="margin-top:.5rem">Total de clases a crear: <strong>${propuestaGlobal.length}</strong></p></div>
+        <div class="card"><h3 style="font-size:.95rem">✅ Verificación</h3>
+          <p style="margin-top:.4rem"><span class="tag tag-ok">0 choques de docente</span></p>
+          <p style="margin-top:.5rem"><span class="tag tag-ok">${conDescanso} docente(s) con día libre</span></p>
+          ${sinDescansoPosible?`<p style="margin-top:.5rem"><span class="tag tag-aviso">${sinDescansoPosible} con carga muy alta para descansar</span></p>`:''}
+          <p class="muted" style="margin-top:.5rem">Total de clases: <strong>${propuestaGlobal.length}</strong></p></div>
       </div>`;
       if(sinLugar.length) html += `<p class="tag tag-aviso" style="margin-top:.7rem;display:block">No cupieron ${sinLugar.length} sesión(es): ${esc([...new Set(sinLugar)].slice(0,6).join(', '))}${sinLugar.length>6?'…':''}. Revisa la carga de ese docente: probablemente ya no tiene huecos libres en común con ese grupo.</p>`;
 
@@ -2847,6 +3010,7 @@ function vistaAuditor(el){
         <select id="auCiclo">${listaCiclos().map(c=>`<option ${c===(DB.plantel.ciclo||cicloActualAuto())?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="spacer"></div>
       <button class="btn btn-outline" id="auTabla">📊 Tabla de carga horaria</button>
+      <button class="btn btn-outline" id="auBalance">⚖️ Balancear carga</button>
       <button class="btn btn-gold" id="auAjuste">🔧 Ajuste automático</button>
       <button class="btn btn-primary" id="auAuditar">🔍 Ejecutar auditoría</button>
     </div>
@@ -2929,6 +3093,7 @@ function vistaAuditor(el){
 
   $('#auAuditar').addEventListener('click', auditar);
   $('#auTabla').addEventListener('click', ()=>tablaCargaHoraria($('#auCiclo').value));
+  $('#auBalance').addEventListener('click', ()=>modalBalanceCarga($('#auCiclo').value));
   $('#auAjuste').addEventListener('click', ()=>modalAjusteAutomatico($('#auCiclo').value));
   auditar(); // ejecutar al abrir
 }
@@ -2945,18 +3110,25 @@ function tablaCargaHoraria(ciclo){
   const bloques = BLOQUES_P50.filter(b=>!b.receso);
 
   // Mapa docente → día → [clases]
+  const bloquesIdx = BLOQUES_P50.filter(b=>!b.receso).map(b=>b.hi);
   const docentes = DB.docentes.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
   const cargaData = docentes.map(d=>{
     const clasesDoc = clasesCiclo.filter(h=>materia(h.materiaId)?.docenteId===d.id);
-    const porDia = {}; let dupl = 0;
+    const porDia = {}; let dupl = 0; let huecos = 0;
     DIAS.forEach(dia=>{
       const cls = clasesDoc.filter(h=>h.dia===dia).sort((a,b)=>a.hi.localeCompare(b.hi));
       // Detectar duplicados: mismo docente, mismo bloque, distinto grupo
       const porBloque = {};
       cls.forEach(c=>{ porBloque[c.hi]=(porBloque[c.hi]||0)+1; if(porBloque[c.hi]>1) dupl++; });
+      // Contar horas hueco: bloques vacíos entre la primera y la última clase del día
+      const idxs = [...new Set(cls.map(c=>bloquesIdx.indexOf(c.hi)).filter(i=>i>=0))].sort((a,b)=>a-b);
+      if(idxs.length>=2){
+        const span = idxs[idxs.length-1]-idxs[0]+1;
+        huecos += span - idxs.length; // espacios vacíos dentro del rango
+      }
       porDia[dia] = cls;
     });
-    return {docente:d, porDia, total:clasesDoc.length, duplicados:dupl,
+    return {docente:d, porDia, total:clasesDoc.length, duplicados:dupl, huecos,
       diasActivos:DIAS.filter(dia=>porDia[dia].length>0).length};
   });
 
@@ -2968,7 +3140,7 @@ function tablaCargaHoraria(ciclo){
         <thead><tr>
           <th style="text-align:left">Docente</th>
           ${DIAS.map(d=>`<th>${d.slice(0,3)}</th>`).join('')}
-          <th>Total h/sem</th><th>Días</th><th>Estado</th></tr></thead>
+          <th>Total h/sem</th><th>Días</th><th>Huecos</th><th>Estado</th></tr></thead>
         <tbody>
         ${cargaData.map(cd=>`<tr>
           <td style="text-align:left"><strong>${esc(cd.docente.nombre)}</strong></td>
@@ -2981,6 +3153,7 @@ function tablaCargaHoraria(ciclo){
           }).join('')}
           <td><strong>${cd.total}</strong></td>
           <td>${cd.diasActivos}/5</td>
+          <td>${cd.huecos>0?`<span class="tag ${cd.huecos>=4?'tag-mal':'tag-aviso'}">${cd.huecos}h</span>`:'<span class="tag tag-ok">0</span>'}</td>
           <td>${cd.duplicados>0?`<span class="tag tag-mal">${cd.duplicados} dupl.</span>`
             : cd.total>35?`<span class="tag tag-aviso">Sobrecarga</span>`
             : cd.total===0?`<span class="muted">Sin carga</span>`
@@ -2998,6 +3171,96 @@ function tablaCargaHoraria(ciclo){
    Detecta duplicados de docente (mismo bloque, dos grupos) y los reubica
    automáticamente a un hueco libre, respetando grupo y docente.
    ═══════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   BALANCEO DE CARGA DOCENTE
+   Detecta docentes con carga > 28h (sin día libre posible) y propone pasar
+   algunas de sus materias a docentes con capacidad disponible (misma
+   especialidad/semestre preferentemente), para que ambos puedan descansar.
+   ═══════════════════════════════════════════════════════════════════════ */
+function modalBalanceCarga(ciclo){
+  const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
+  const gids = new Set(grupos.map(g=>g.id));
+  const semestresActivos = [...new Set(grupos.map(g=>g.semestre))];
+  const TOPE = 28; // máximo para tener día libre (7 bloques × 4 días)
+
+  // Carga actual por docente (sesiones/semana de sus materias en grupos del ciclo)
+  const cargaDoc = {};
+  DB.materias.forEach(m=>{
+    if(!m.docenteId) return;
+    const nGrupos = grupos.filter(g=>g.semestre===m.semestre).length;
+    // Si la materia está asignada en horario, contar sus clases reales; si no, estimar
+    const clasesReales = DB.horarios.filter(h=>gids.has(h.grupoId)&&h.materiaId===m.id).length;
+    cargaDoc[m.docenteId] = (cargaDoc[m.docenteId]||0) + (clasesReales||((m.sesionesSemana||0)*nGrupos));
+  });
+
+  const sobrecargados = DB.docentes.filter(d=>(cargaDoc[d.id]||0)>TOPE)
+    .map(d=>({d, carga:cargaDoc[d.id]})).sort((a,b)=>b.carga-a.carga);
+  const disponibles = DB.docentes.filter(d=>(cargaDoc[d.id]||0)<TOPE)
+    .map(d=>({d, carga:cargaDoc[d.id]||0, espacio:TOPE-(cargaDoc[d.id]||0)}))
+    .sort((a,b)=>b.espacio-a.espacio);
+
+  if(!sobrecargados.length){
+    abrirModal('⚖️ Balanceo de carga', `<div class="vacio"><span class="icono">✅</span>Ningún docente supera las ${TOPE} horas. Todos pueden tener al menos un día de descanso con la distribución actual.</div>
+      <div class="modal-foot"><button class="btn btn-primary" id="blCerrar">Entendido</button></div>`,
+      body=>body.querySelector('#blCerrar').addEventListener('click', cerrarModal));
+    return;
+  }
+
+  // Generar sugerencias: para cada sobrecargado, qué materias pasar y a quién
+  const sugerencias = [];
+  const cargaSimulada = {...cargaDoc};
+  sobrecargados.forEach(({d, carga})=>{
+    let exceso = carga - TOPE;
+    // Materias de este docente ordenadas por menor nº de sesiones (más fáciles de mover)
+    const susMaterias = DB.materias.filter(m=>m.docenteId===d.id && semestresActivos.includes(m.semestre))
+      .map(m=>({m, peso:(m.sesionesSemana||0)*grupos.filter(g=>g.semestre===m.semestre).length}))
+      .sort((a,b)=>a.peso-b.peso);
+    for(const {m, peso} of susMaterias){
+      if(cargaSimulada[d.id]-TOPE<=0) break;
+      // Buscar docente disponible con espacio suficiente
+      const receptor = disponibles.find(r=>r.d.id!==d.id && (TOPE-(cargaSimulada[r.d.id]||0))>=peso);
+      if(receptor){
+        sugerencias.push({materia:m, de:d, a:receptor.d, peso});
+        cargaSimulada[d.id] = (cargaSimulada[d.id]||0) - peso;
+        cargaSimulada[receptor.d.id] = (cargaSimulada[receptor.d.id]||0) + peso;
+      }
+    }
+  });
+
+  const filasSobre = sobrecargados.map(({d,carga})=>
+    `<tr><td>${esc(d.nombre)}</td><td style="text-align:center"><span class="tag tag-mal">${carga}h</span></td>
+     <td style="text-align:center">${cargaSimulada[d.id]<=TOPE?`<span class="tag tag-ok">${cargaSimulada[d.id]}h ✓</span>`:`<span class="tag tag-aviso">${cargaSimulada[d.id]}h</span>`}</td></tr>`).join('');
+
+  const filasSug = sugerencias.length ? sugerencias.map(s=>
+    `<tr><td>${esc(s.materia.nombre)} <span class="muted">(${s.peso}h)</span></td>
+     <td>${esc(s.de.nombre)}</td><td>→</td><td><strong>${esc(s.a.nombre)}</strong></td></tr>`).join('')
+    : `<tr><td colspan="4" class="muted" style="text-align:center;padding:1rem">No hay docentes con espacio suficiente para recibir materias. Considera contratar apoyo o revisar la plantilla.</td></tr>`;
+
+  abrirModal('⚖️ Balanceo de carga docente', `
+    <p class="muted">Docentes que superan las <strong>${TOPE}h</strong> (no pueden tener día libre). El sistema sugiere redistribuir materias hacia docentes con capacidad:</p>
+    <h4 style="margin:.8rem 0 .3rem">Docentes sobrecargados</h4>
+    <div class="table-wrap"><table style="font-size:.85rem">
+      <thead><tr><th>Docente</th><th>Carga actual</th><th>Tras balancear</th></tr></thead>
+      <tbody>${filasSobre}</tbody></table></div>
+    <h4 style="margin:1rem 0 .3rem">Movimientos sugeridos</h4>
+    <div class="table-wrap"><table style="font-size:.85rem">
+      <thead><tr><th>Materia</th><th>Quitar a</th><th></th><th>Asignar a</th></tr></thead>
+      <tbody>${filasSug}</tbody></table></div>
+    <div class="aviso-box" style="background:var(--aviso-bg);color:var(--aviso);border-radius:8px;padding:.6rem .8rem;font-size:.83rem;margin-top:.7rem">💡 Estas son <strong>sugerencias</strong>. Al aplicar, se reasigna el docente responsable de cada materia. Deberás rearmar el horario del plantel para reflejar los cambios. Verifica que el docente receptor tenga el perfil adecuado para la materia.</div>
+    <div class="modal-foot"><button class="btn btn-outline" id="blCan">Cancelar</button>
+    ${sugerencias.length?'<button class="btn btn-primary" id="blOk">Aplicar reasignaciones</button>':''}</div>`,
+  body=>{
+    body.querySelector('#blCan').addEventListener('click', cerrarModal);
+    body.querySelector('#blOk')?.addEventListener('click', ()=>{
+      if(!confirm(`Se reasignarán ${sugerencias.length} materia(s) a otros docentes. Luego deberás rearmar el horario. ¿Continuar?`)) return;
+      const cambios = sugerencias.map(s=>{ s.materia.docenteId = s.a.id; return s.materia; });
+      persist('materias', cambios);
+      cerrarModal(); render();
+      toast(`${sugerencias.length} materia(s) reasignada(s). Ahora rearma el horario del plantel.`);
+    });
+  });
+}
+
 function modalAjusteAutomatico(ciclo){
   const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
   const gids = new Set(grupos.map(g=>g.id));
