@@ -6,7 +6,7 @@
    Sube el número de versión (CACHE) cada vez que actualices
    archivos del sistema, para que los dispositivos descarguen lo nuevo.
    ════════════════════════════════════════════════════════════════ */
-const CACHE = 'sige-p50-v27';
+const CACHE = 'sige-p50-v24';
 const ARCHIVOS = [
   './',
   './index.html',
