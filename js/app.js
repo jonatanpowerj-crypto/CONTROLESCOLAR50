@@ -27,10 +27,9 @@ const BLOQUES_P50 = [
 /* ── Catálogo oficial · Plan de Estudios del Bachillerato General 2023 (MCCEMS) ──
    Permite crear materias con la clave y semestre oficiales sin teclear. */
 const PLAN_2023 = [
-  {sem:1, clave:'23B04101', nombre:'La Materia y sus Interacciones'},
-  {sem:1, clave:'23B04102', nombre:'Humanidades I'},
+  {sem:1, clave:'23B04101', nombre:'Invitación a La Ciencia. Naturaleza de la Materia'},
+  {sem:1, clave:'23B04102', nombre:'Pensamiento Filosófico y Humanidades I'},
   {sem:1, clave:'23B04103', nombre:'Ciencias Sociales I'},
-  {sem:1, clave:'23B04104', nombre:'Laboratorio de Investigación I'},
   {sem:1, clave:'23B04105', nombre:'Lengua y Comunicación I'},
   {sem:1, clave:'23B04106', nombre:'Inglés I'},
   {sem:1, clave:'23B04107', nombre:'Pensamiento Matemático I'},
@@ -48,6 +47,7 @@ const PLAN_2023 = [
   {sem:2, clave:'23B04219', nombre:'Actividades Físico-Deportivas II'},
   {sem:2, clave:'23B04252', nombre:'Tutorías II'},
   {sem:3, clave:'23B04320', nombre:'Temas Selectos de Ciencias Naturales II'},
+  {sem:3, clave:'23B04321', nombre:'Laboratorio de Investigación I'},
   {sem:3, clave:'23B04323', nombre:'Conciencia Histórica I'},
   {sem:3, clave:'23B04324', nombre:'Lengua y Comunicación III'},
   {sem:3, clave:'23B04325', nombre:'Inglés III'},
@@ -65,13 +65,25 @@ const PLAN_2023 = [
   {sem:4, clave:'23B04454', nombre:'Tutorías IV'},
   {sem:4, clave:'23B04457', nombre:'Temas Selectos de Ciencias Naturales III'},
   {sem:4, clave:'23B04460', nombre:'Humanidades III'},
-  {sem:5, clave:'23B04537', nombre:'Organismos, Estructuras y Procesos. Herencia y Evolución Biológica'},
-  {sem:5, clave:'23B04538', nombre:'La Energía en los Procesos de la Vida Diaria'},
+  {sem:5, clave:'23B04537', nombre:'¿Qué es la Vida? Evolución y Diversidad Biológica'},
+  {sem:5, clave:'23B04538', nombre:'Del Átomo al Universo. Fuerza y Energía'},
   {sem:5, clave:'23B04539', nombre:'Ciencias Sociales III'},
   {sem:5, clave:'23B04540', nombre:'Pensamiento Literario II'},
-  {sem:5, clave:'23B04541', nombre:'Temas Selectos de Matemáticas II'},
+  {sem:5, clave:'23B04541', nombre:'Pensamiento Matemático V'},
   {sem:5, clave:'23B04542', nombre:'Actividades Artísticas y Culturales III'},
   {sem:5, clave:'23B04543', nombre:'Educación Integral en Salud'},
+  // Optativas de quinto semestre (elige la(s) que impartirá el plantel)
+  {sem:5, clave:'23B04544', nombre:'Optativa: Química Aplicada I'},
+  {sem:5, clave:'23B04545', nombre:'Optativa: Ciencias de la Salud I'},
+  {sem:5, clave:'23B04546', nombre:'Optativa: Botánica'},
+  {sem:5, clave:'23B04547', nombre:'Optativa: Temas Selectos de Física'},
+  {sem:5, clave:'23B04548', nombre:'Optativa: Principios de Contabilidad'},
+  {sem:5, clave:'23B04549', nombre:'Optativa: Introducción al Derecho'},
+  {sem:5, clave:'23B04550', nombre:'Optativa: Temas Selectos de Humanidades I'},
+  {sem:5, clave:'23B04551', nombre:'Optativa: Introducción a la Ingeniería'},
+  {sem:5, clave:'23B04552', nombre:'Optativa: Pensamiento Matemático Avanzado I'},
+  {sem:5, clave:'23B04553', nombre:'Optativa: Etimologías Grecolatinas'},
+  {sem:5, clave:'23B04554', nombre:'Optativa: Cultura Digital Aplicada'},
   {sem:5, clave:'23B04555', nombre:'Tutorías V'},
   {sem:6, clave:'23B04644', nombre:'Ecosistemas: Interacciones, Energía y Dinámica'},
   {sem:6, clave:'23B04645', nombre:'La Realidad Económica de México'},
@@ -146,8 +158,58 @@ function semilla(){
     asistencias:[],      // {id, fecha, materiaId, grupoId, alumnoId, estado:'P|R|J|F', metodo:'qr|manual', hora}
     calificaciones:[],   // {id, alumnoId, materiaId, parcial:1|2|3, rubro, valor}
     bitacora:[],         // {id, fecha, materiaId, grupoId, campo, tema, actividades, tarea, observaciones}
-    calendario:[],       // {id, fecha, fechaFin, titulo, tipo, nota}
+    calendario: calendarioOficial2026A(),   // {id, fecha, fechaFin, titulo, tipo, nota}
   };
+}
+
+/* ── Calendario escolar oficial UAGro · Ciclo 2026-A (agosto 2026 – enero 2027) ──
+   Cargado como datos semilla (arranque en modo local y "Restablecer con datos
+   de demostración"). La administración puede editarlo libremente desde
+   Calendario escolar una vez en operación. */
+function calendarioOficial2026A(){
+  const ev = (fecha, titulo, tipo, fechaFin, nota) => ({id:uid(), fecha, fechaFin:fechaFin||'', titulo, tipo, nota:nota||''});
+  return [
+    // ── Agosto 2026 ──
+    ev('2026-07-27','Inscripciones','evento','2026-08-07'),
+    ev('2026-08-17','Reinscripciones','evento','2026-08-21'),
+    ev('2026-08-20','Inicio de semestre','evento'),
+    ev('2026-08-24','Jornada de Bienvenida','evento','2026-08-28'),
+    ev('2026-08-25','Reunión de planeación en cada Escuela Preparatoria','evento'),
+    ev('2026-08-26','Reunión de Planeación de Cuerpos Colegiados','evento'),
+    ev('2026-08-31','Inicio de Clases','evento'),
+    // ── Septiembre 2026 ──
+    ev('2026-09-07','Primer periodo de exámenes extraordinarios','parcial','2026-09-28'),
+    ev('2026-09-11','Tequios','evento'),
+    ev('2026-09-15','Suspensión de labores','suspension','2026-09-16'),
+    ev('2026-09-28','Jornada "La escuela te extraña"','evento','2026-09-30'),
+    // ── Octubre 2026 ──
+    ev('2026-10-01','Jornada "La escuela te extraña"','evento','2026-10-09'),
+    ev('2026-10-05','Entrega de primera evaluación parcial','entrega','2026-10-07'),
+    ev('2026-10-08','Reunión de Cuerpos Colegiados','evento'),
+    ev('2026-10-09','Tequios','evento'),
+    ev('2026-10-12','Suspensión de labores','suspension'),
+    ev('2026-10-23','Foro "Reflexión del MCCEMS"','evento'),
+    ev('2026-10-27','Suspensión de labores','suspension'),
+    // ── Noviembre 2026 ──
+    ev('2026-11-01','Tequios (Rodada)','evento'),
+    ev('2026-11-01','Suspensión de labores','suspension','2026-11-02'),
+    ev('2026-11-03','Segundo periodo de exámenes extraordinarios','parcial','2026-11-13'),
+    ev('2026-11-16','Entrega de segunda evaluación parcial','entrega','2026-11-18'),
+    ev('2026-11-16','Suspensión de labores','suspension'),
+    ev('2026-11-19','Reunión de Cuerpos Colegiados','evento'),
+    // ── Diciembre 2026 ──
+    ev('2026-12-04','Tequios','evento'),
+    ev('2026-12-12','Suspensión de labores','suspension'),
+    ev('2026-12-21','Periodo vacacional de invierno','suspension','2026-12-31'),
+    // ── Enero 2027 ──
+    ev('2027-01-06','Concluye periodo vacacional de invierno','evento'),
+    ev('2027-01-18','Entrega de tercera evaluación parcial','entrega','2027-01-20'),
+    ev('2027-01-21','Fin de Clases','evento'),
+    ev('2027-01-22','Reunión de Cuerpos Colegiados','evento'),
+    ev('2027-01-25','Reunión de planeación del semestre febrero-julio con directores','evento'),
+    ev('2027-01-28','Reunión de Planeación de Cuerpos Colegiados','evento'),
+    ev('2027-01-29','Fin de semestre','evento'),
+  ];
 }
 
 /* ── Ciclo escolar UAGro: Agosto–Enero = A (impar) · Febrero–Julio = B (par) ── */
@@ -815,8 +877,7 @@ function aplicarRegistro(data){
     DB.docentes.push(doc); persist('docentes', doc); }
   const cambios = [];
   data.materias.forEach(m=>{
-    // Buscar por clave Y semestre (evita mezclar con una materia homónima de otro semestre)
-    let mat = DB.materias.find(x=>x.clave===m.clave && x.semestre===m.semestre);
+    let mat = DB.materias.find(x=>x.clave===m.clave);
     const rubros = (m.rubros&&m.rubros.length)?m.rubros:[{nombre:'Examen',peso:40},{nombre:'Trabajos',peso:35},{nombre:'Participación',peso:25}];
     if(mat){ mat.docenteId=doc.id; if(m.horasSemana)mat.horasSemana=m.horasSemana; if(m.sesionesSemana)mat.sesionesSemana=m.sesionesSemana; cambios.push(mat); }
     else { mat={id:uid(), clave:m.clave, nombre:m.nombre, semestre:m.semestre,
@@ -832,7 +893,7 @@ function importarRegistroDocente(data){
   if(!data || !data.docente || !Array.isArray(data.materias)){ toast('El archivo no tiene el formato esperado.'); return; }
   const d = data.docente;
   const previa = data.materias.map(m=>{
-    const existe = DB.materias.some(x=>x.clave===m.clave && x.semestre===m.semestre);
+    const existe = DB.materias.some(x=>x.clave===m.clave);
     return `<tr><td class="mono">${esc(m.clave)}</td><td>${esc(m.nombre)}</td>
       <td style="text-align:center">${m.semestre}</td><td style="text-align:center">${esc(m.grupos||'—')}</td>
       <td style="text-align:center">${m.sesionesSemana||0}</td>
@@ -858,7 +919,7 @@ function importarRegistroDocente(data){
       // 2) Materias: crear nuevas o vincular existentes
       const cambios = [];
       data.materias.forEach(m=>{
-        let mat = DB.materias.find(x=>x.clave===m.clave && x.semestre===m.semestre);
+        let mat = DB.materias.find(x=>x.clave===m.clave);
         const rubros = (m.rubros&&m.rubros.length)?m.rubros:[{nombre:'Examen',peso:40},{nombre:'Trabajos',peso:35},{nombre:'Participación',peso:25}];
         if(mat){ mat.docenteId=doc.id; if(m.horasSemana)mat.horasSemana=m.horasSemana; if(m.sesionesSemana)mat.sesionesSemana=m.sesionesSemana; cambios.push(mat); }
         else { mat={id:uid(), clave:m.clave, nombre:m.nombre, semestre:m.semestre,
@@ -1221,8 +1282,7 @@ function vistaHorarios(el){
     ${!esAdmin()?'<button class="btn btn-outline" id="miHorario">📅 Mi horario semanal</button>':''}
     <button class="btn btn-outline" id="horPDF">🧾 Exportar PDF</button>
     ${esAdmin()?`<button class="btn btn-gold" id="armarHorario">🪄 Armar este grupo</button>
-    <button class="btn btn-danger" id="armarPlantel" style="background:var(--azul-900)">🏫 Armar TODO el plantel</button>
-    <button class="btn btn-danger" id="borrarPlantel">🗑️ Borrar horario completo</button>`:''}
+    <button class="btn btn-danger" id="armarPlantel" style="background:var(--azul-900)">🏫 Armar TODO el plantel</button>`:''}
     <button class="btn btn-primary" id="nuevoHor">＋ Agregar clase</button>
   </div>
   <div id="horZona"></div>`;
@@ -1230,7 +1290,6 @@ function vistaHorarios(el){
   $('#horSel').addEventListener('change', e=>{ horGrupo=e.target.value; pintar(); });
   if(esAdmin()) $('#armarHorario').addEventListener('click', ()=>modalArmarHorario());
   if(esAdmin()) $('#armarPlantel')?.addEventListener('click', ()=>modalArmarPlantel());
-  if(esAdmin()) $('#borrarPlantel')?.addEventListener('click', ()=>modalBorrarHorarioCompleto());
   if(!esAdmin()) $('#miHorario')?.addEventListener('click', ()=>modalMiHorario());
   $('#horPDF').addEventListener('click', ()=>exportarHorarioPDF(esAdmin()?horGrupo:null));
   $('#nuevoHor').addEventListener('click', ()=>{
@@ -1331,11 +1390,7 @@ function modalArmarPlantel(){
     <p class="muted">El sistema acomodará los grupos del ciclo elegido a la vez, en la malla oficial (3:00–8:15 PM, receso 5:40–6:15). Si un docente imparte clase en varios grupos o semestres, el sistema <strong>nunca lo agendará dos veces a la misma hora</strong>. Cultura Digital se prioriza en 2–3 días por grupo.</p>
     <div class="field" style="margin-top:.7rem"><label>Ciclo escolar a armar</label>
       <select id="hpCiclo">${listaCiclos().map(c=>`<option ${c===cicloDefault?'selected':''}>${c} ${DB.grupos.filter(g=>g.ciclo===c).length?'· '+DB.grupos.filter(g=>g.ciclo===c).length+' grupo(s)':'· sin grupos'}</option>`).join('')}</select></div>
-    <div class="field full" style="margin-top:.6rem"><label style="display:flex;align-items:center;gap:.5rem;cursor:pointer">
-      <input type="checkbox" id="hpReiniciar" checked style="width:18px;height:18px">
-      🔄 Reiniciar horario: borrar TODAS las clases actuales de estos grupos antes de armar</label>
-      <span class="muted" style="font-size:.76rem">Recomendado. Evita duplicar sesiones si ya armaste antes. Desmárcalo solo si quieres conservar clases agregadas a mano y sumar el resto.</span></div>
-    <div id="hpAvisoExistente" style="margin-top:.5rem"></div>
+    <div class="aviso-box" style="background:var(--aviso-bg);color:var(--aviso);border-radius:8px;padding:.6rem .8rem;font-size:.85rem;margin-top:.6rem">⚠️ Solo se arman los grupos del ciclo seleccionado. Los horarios ya existentes se respetan (no se borran).</div>
     <div id="hpPreview" style="margin-top:.9rem"></div>
     <div class="modal-foot">
       <button class="btn btn-outline" id="hpCan">Cancelar</button>
@@ -1345,17 +1400,9 @@ function modalArmarPlantel(){
   body=>{
     let propuestaGlobal = [];
     let grupos = DB.grupos.filter(g=>g.ciclo===cicloDefault || !g.ciclo);
-    const mostrarAvisoExistente = ()=>{
-      const gids = new Set(grupos.map(g=>g.id));
-      const n = DB.horarios.filter(h=>gids.has(h.grupoId)).length;
-      body.querySelector('#hpAvisoExistente').innerHTML = n
-        ? `<p class="tag tag-aviso">Estos grupos ya tienen ${n} clase(s) en el horario actual.</p>` : '';
-    };
-    mostrarAvisoExistente();
     body.querySelector('#hpCiclo').addEventListener('change', e=>{
       grupos = DB.grupos.filter(g=>g.ciclo===e.target.value);
       body.querySelector('#hpPreview').innerHTML=''; body.querySelector('#hpOk').disabled=true;
-      mostrarAvisoExistente();
     });
     body.querySelector('#hpCan').addEventListener('click', cerrarModal);
 
@@ -1430,21 +1477,14 @@ function modalArmarPlantel(){
 
       const diasDoc = {}; // docId -> Set(diaIndex) usados
 
-      // Ordenar demandas para un armado que concentre los días de cada docente:
-      // 1) Cultura Digital primero (prioridad institucional)
-      // 2) AGRUPAR por docente (todas sus materias juntas, así se concentran sus días)
-      // 3) dentro del docente, los de más carga primero
+      // Ordenar demandas: 1) Cultura Digital, 2) docentes con día de descanso (colocan
+      // primero, mientras hay espacio para respetar su día libre), 3) más grupos, 4) más sesiones
       demandas.sort((a,b)=>{
         if(esCultura(a.materia)!==esCultura(b.materia)) return esCultura(a.materia)?-1:1;
         const da = diaDescanso[a.materia.docenteId]!=null?1:0, db = diaDescanso[b.materia.docenteId]!=null?1:0;
         if(da!==db) return db-da;
-        // Agrupar por docente: mismas materias del mismo maestro seguidas
-        const docA = a.materia.docenteId||'zzz', docB = b.materia.docenteId||'zzz';
-        if(docA!==docB){
-          const ca = cargaTotalDoc[a.materia.docenteId]||0, cb = cargaTotalDoc[b.materia.docenteId]||0;
-          if(ca!==cb) return cb-ca;             // docentes más cargados primero
-          return docA.localeCompare(docB);       // desempate estable por id
-        }
+        const ca = cargaDocente[a.materia.docenteId]||0, cb = cargaDocente[b.materia.docenteId]||0;
+        if(ca!==cb) return cb-ca;
         return (b.materia.sesionesSemana||0)-(a.materia.sesionesSemana||0);
       });
 
@@ -1464,18 +1504,14 @@ function modalArmarPlantel(){
           if(!candidatos.length){ sinLugar.push(`${m.nombre} (${g.nombre})`); continue; }
 
           candidatos.sort((a,b)=>{
-            if(a.esDiaLibre!==b.esDiaLibre) return a.esDiaLibre-b.esDiaLibre; // 1) evitar día de descanso
-            if(m.prioridadTemprana){ if(a.bi!==b.bi) return a.bi-b.bi; }       // 2) prioridad primeras horas
-            // 3) NO repetir la MISMA materia dos veces el mismo día en el MISMO grupo
-            //    (esto es a nivel grupo+materia; evita 2 clases de lo mismo seguidas)
-            if(a.repetido!==b.repetido) return a.repetido-b.repetido;
-            // 4) CONCENTRAR LOS DÍAS DEL DOCENTE: preferir días donde el docente YA trabaja,
-            //    para que no termine dando clases los 5 días. Este es el arreglo clave.
-            if(a.docTrabajaEseDia!==b.docTrabajaEseDia) return b.docTrabajaEseDia-a.docTrabajaEseDia;
-            // 5) COMPACIDAD: dentro del día, minimizar huecos del docente
+            if(a.esDiaLibre!==b.esDiaLibre) return a.esDiaLibre-b.esDiaLibre; // 1) evitar día libre
+            if(m.prioridadTemprana){ if(a.bi!==b.bi) return a.bi-b.bi; }       // 2) prioridad temprana
+            if(pocaCarga){ if(a.repetido!==b.repetido) return b.repetido-a.repetido; } // 3) poca carga: concentrar
+            else { if(a.repetido!==b.repetido) return a.repetido-b.repetido; }         //    resto: repartir
+            // 4) COMPACIDAD: minimizar huecos del docente (menos ventanas muertas)
             if(a.huecoDoc!==b.huecoDoc) return a.huecoDoc-b.huecoDoc;
-            if(a.adyacente!==b.adyacente) return b.adyacente-a.adyacente;
-            // 6) balancear carga diaria del grupo
+            if(a.adyacente!==b.adyacente) return b.adyacente-a.adyacente; // preferir pegado a otra clase
+            // 5) balancear carga diaria del grupo
             return a.carga-b.carga;
           });
 
@@ -1504,12 +1540,11 @@ function modalArmarPlantel(){
               // ── COMPACIDAD DEL DOCENTE ──
               // Calcular el "hueco" que este bloque generaría en el día del docente.
               // Si el docente ya tiene clases ese día, preferimos bloques contiguos.
-              let huecoDoc = 0, adyacente = 0, docTrabajaEseDia = 0;
+              let huecoDoc = 0, adyacente = 0;
               if(docId && ocupDoc[docId]){
                 const filaDoc = ocupDoc[docId][di];
                 const ocupados = filaDoc.map((x,i)=>x?i:-1).filter(i=>i>=0);
                 if(ocupados.length){
-                  docTrabajaEseDia = 1; // el docente ya tiene clase(s) este día
                   // ¿El bloque candidato es adyacente a una clase existente?
                   if(filaDoc[bi-1] || filaDoc[bi+1]) adyacente = 1;
                   // Hueco = distancia al bloque ocupado más cercano, menos 1 (0 = pegado)
@@ -1517,7 +1552,7 @@ function modalArmarPlantel(){
                   huecoDoc = Math.max(0, distMin-1);
                 }
               }
-              out.push({di, bi, carga:cargaGrupo, repetido, esDiaLibre, huecoDoc, adyacente, docTrabajaEseDia});
+              out.push({di, bi, carga:cargaGrupo, repetido, esDiaLibre, huecoDoc, adyacente});
             });
           });
           return out;
@@ -1592,42 +1627,41 @@ function modalArmarPlantel(){
 
       // ═══ TERCERA PASADA: COMPACTACIÓN (eliminar horas hueco del docente) ═══
       // Para cada docente y cada día, si tiene clases separadas por huecos,
-      // intenta deslizar CUALQUIERA de sus clases de ese día hacia el hueco,
-      // no solo la última — así se resuelven casos donde la última clase no
-      // puede moverse pero otra sí, dejando el día realmente compacto.
+      // intenta deslizar las clases aisladas hacia bloques contiguos a sus otras
+      // clases del mismo día (moviendo dentro del mismo día, sin crear choques).
       const bloquesClase = BLOQUES_P50.filter(b=>!b.receso);
       Object.keys(ocupDoc).forEach(docId=>{
         DIAS.forEach((d,di)=>{
           let intentos = 0;
           let mejora = true;
-          while(mejora && intentos<bloquesClase.length*2){
+          while(mejora && intentos<bloquesClase.length){
             mejora = false; intentos++;
             const fila = ocupDoc[docId][di];
             const ocupados = fila.map((x,i)=>x?i:-1).filter(i=>i>=0);
             if(ocupados.length<2) break; // 0 o 1 clase: no hay huecos que cerrar
             const primero = ocupados[0], ultimo = ocupados[ocupados.length-1];
-            for(let bi=primero; bi<=ultimo && !mejora; bi++){
+            // Buscar un hueco entre la primera y la última clase
+            for(let bi=primero; bi<=ultimo; bi++){
               if(fila[bi]) continue; // ya ocupado, no es hueco
-              // Hay un hueco en bi. Probar TODAS las clases posteriores al hueco
-              // (de la más lejana a la más cercana, para maximizar la compactación).
-              const candidatasAMover = ocupados.filter(o=>o>bi).sort((a,b)=>b-a);
-              for(const origen of candidatasAMover){
-                const gIdOrigen = fila[origen];
-                if(!gIdOrigen) continue;
-                if(ocupGrupo[gIdOrigen][di][bi]) continue; // el grupo ya ocupa ese hueco, probar otra clase
-                const pMover = propuestaGlobal.find(x=>x.grupoId===gIdOrigen && DIAS.indexOf(x.dia)===di
-                  && x.hi===bloquesClase[origen].hi && materia(x.materiaId)?.docenteId===docId);
-                if(!pMover) continue;
-                // Ejecutar el movimiento: origen → bi
-                ocupGrupo[gIdOrigen][di][origen] = null;
-                ocupDoc[docId][di][origen] = null;
-                ocupGrupo[gIdOrigen][di][bi] = pMover.materiaId;
-                ocupDoc[docId][di][bi] = gIdOrigen;
-                pMover.hi = bloquesClase[bi].hi;
-                pMover.hf = bloquesClase[bi].hf;
-                mejora = true;
-                break;
-              }
+              // Hay un hueco en bi. Intentar traer la clase más lejana hacia aquí.
+              // Tomamos la última clase del día y la movemos al hueco, si el grupo lo permite.
+              const gIdUlt = fila[ultimo];
+              if(!gIdUlt) break;
+              // ¿El grupo de esa clase tiene libre el bloque del hueco?
+              if(ocupGrupo[gIdUlt][di][bi]) continue;
+              // Buscar la propuesta correspondiente a mover
+              const pMover = propuestaGlobal.find(x=>x.grupoId===gIdUlt && DIAS.indexOf(x.dia)===di
+                && x.hi===bloquesClase[ultimo].hi && materia(x.materiaId)?.docenteId===docId);
+              if(!pMover) continue;
+              // Ejecutar el movimiento: ultimo → bi
+              ocupGrupo[gIdUlt][di][ultimo] = null;
+              ocupDoc[docId][di][ultimo] = null;
+              ocupGrupo[gIdUlt][di][bi] = pMover.materiaId;
+              ocupDoc[docId][di][bi] = gIdUlt;
+              pMover.hi = bloquesClase[bi].hi;
+              pMover.hf = bloquesClase[bi].hf;
+              mejora = true;
+              break;
             }
           }
         });
@@ -1663,61 +1697,12 @@ function modalArmarPlantel(){
     body.querySelector('#hpVista').addEventListener('click', previsualizar);
     body.querySelector('#hpOk').addEventListener('click', ()=>{
       if(!propuestaGlobal.length) return;
-      const reiniciar = body.querySelector('#hpReiniciar').checked;
-      const gids = new Set(grupos.map(g=>g.id));
-      const existentes = DB.horarios.filter(h=>gids.has(h.grupoId));
-      const msj = reiniciar
-        ? `Se borrarán las ${existentes.length} clase(s) actuales de estos grupos y se crearán ${propuestaGlobal.length} nuevas. ¿Continuar?`
-        : `Se AGREGARÁN ${propuestaGlobal.length} clases nuevas, sumándose a las ${existentes.length} que ya existen (puede duplicar sesiones si ya habías armado antes). ¿Continuar?`;
-      if(!confirm(msj)) return;
-
-      if(reiniciar && existentes.length){
-        const idsBorrar = new Set(existentes.map(h=>h.id));
-        DB.horarios = DB.horarios.filter(h=>!idsBorrar.has(h.id));
-        persistDel('horarios', [...idsBorrar]);
-      }
+      if(!confirm(`Se agregarán ${propuestaGlobal.length} clases distribuidas en los ${grupos.length} grupos del plantel. ¿Continuar?`)) return;
       const nuevos = propuestaGlobal.map(p=>({id:uid(), ...p, aula:p.aula||'Por asignar'}));
       nuevos.forEach(n=>DB.horarios.push(n));
       persist('horarios', nuevos);
       cerrarModal(); render();
-      toast(`Horario del plantel armado: ${nuevos.length} clases en ${grupos.length} grupos, sin choques de docente.${reiniciar&&existentes.length?` (${existentes.length} clases previas reemplazadas)`:''}`);
-    });
-  });
-}
-
-/* Borra TODAS las clases del horario de un ciclo, para empezar de cero */
-function modalBorrarHorarioCompleto(){
-  const ciclosConGrupos = [...new Set(DB.grupos.map(g=>g.ciclo).filter(Boolean))];
-  const cicloDefault = DB.plantel.ciclo || ciclosConGrupos[0] || cicloActualAuto();
-
-  abrirModal('🗑️ Borrar horario completo', `
-    <p class="muted">Esta acción elimina <strong>todas las clases</strong> del horario de los grupos del ciclo seleccionado, dejándolos vacíos para volver a armarlos desde cero. No afecta docentes, materias, grupos ni alumnos — solo el horario.</p>
-    <div class="field" style="margin-top:.7rem"><label>Ciclo a borrar</label>
-      <select id="bhCiclo">${listaCiclos().map(c=>`<option ${c===cicloDefault?'selected':''}>${c}</option>`).join('')}</select></div>
-    <div id="bhAviso" style="margin-top:.6rem"></div>
-    <div class="modal-foot"><button class="btn btn-outline" id="bhCan">Cancelar</button>
-    <button class="btn btn-danger" id="bhOk">Borrar horario de este ciclo</button></div>`,
-  body=>{
-    const actualizarAviso = ()=>{
-      const ciclo = body.querySelector('#bhCiclo').value;
-      const gids = new Set(DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo).map(g=>g.id));
-      const n = DB.horarios.filter(h=>gids.has(h.grupoId)).length;
-      body.querySelector('#bhAviso').innerHTML = `<p class="tag ${n?'tag-mal':'tag-ok'}">${n} clase(s) serán eliminadas.</p>`;
-    };
-    actualizarAviso();
-    body.querySelector('#bhCiclo').addEventListener('change', actualizarAviso);
-    body.querySelector('#bhCan').addEventListener('click', cerrarModal);
-    body.querySelector('#bhOk').addEventListener('click', ()=>{
-      const ciclo = body.querySelector('#bhCiclo').value;
-      const gids = new Set(DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo).map(g=>g.id));
-      const aBorrar = DB.horarios.filter(h=>gids.has(h.grupoId));
-      if(!aBorrar.length){ toast('No hay clases que borrar en este ciclo.'); cerrarModal(); return; }
-      if(!confirm(`Se eliminarán ${aBorrar.length} clases del ciclo ${ciclo}. Esta acción NO se puede deshacer. ¿Continuar?`)) return;
-      const ids = new Set(aBorrar.map(h=>h.id));
-      DB.horarios = DB.horarios.filter(h=>!ids.has(h.id));
-      persistDel('horarios', [...ids]);
-      cerrarModal(); render();
-      toast(`${aBorrar.length} clase(s) eliminada(s). Usa «Armar TODO el plantel» para crear el horario de nuevo.`);
+      toast(`Horario del plantel armado: ${nuevos.length} clases en ${grupos.length} grupos, sin choques de docente.`);
     });
   });
 }
@@ -2889,11 +2874,22 @@ function vistaCalendario(el){
   ${!admin?'<p class="muted" style="margin-bottom:.8rem">Consulta el calendario del ciclo escolar. Su edición está a cargo de la administración del plantel.</p>':''}
   <div class="toolbar">
     <div class="spacer"></div>
+    ${admin?'<button class="btn btn-outline" id="calOficial">📅 Cargar calendario oficial 2026-A</button>':''}
     ${admin?'<button class="btn btn-primary" id="calNuevo">＋ Agregar al calendario</button>':''}
   </div>
   <div class="grid grid-2" id="calZona"></div>`;
 
   if(admin) $('#calNuevo').addEventListener('click', ()=>formCalendario(null));
+  if(admin) $('#calOficial').addEventListener('click', ()=>{
+    if(!confirm('Se agregarán al calendario los eventos oficiales del ciclo 2026-A (agosto 2026 – enero 2027). No se borra ni duplica lo ya cargado. ¿Continuar?')) return;
+    const oficial = calendarioOficial2026A();
+    const yaExiste = e => DB.calendario.some(x=>x.fecha===e.fecha && x.titulo.trim().toLowerCase()===e.titulo.trim().toLowerCase());
+    const nuevos = oficial.filter(e=>!yaExiste(e));
+    if(!nuevos.length){ toast('El calendario oficial ya está cargado.'); return; }
+    nuevos.forEach(e=>DB.calendario.push(e));
+    persist('calendario', nuevos);
+    render(); toast(`${nuevos.length} evento(s) del calendario oficial agregado(s).`);
+  });
 
   const pintar = ()=>{
     const hoy = hoyISO();
@@ -3088,7 +3084,6 @@ function vistaAuditor(el){
       <div class="spacer"></div>
       <button class="btn btn-outline" id="auTabla">📊 Tabla de carga horaria</button>
       <button class="btn btn-outline" id="auBalance">⚖️ Balancear carga</button>
-      <button class="btn btn-danger" id="auLimpiar">🧹 Quitar sesiones excedidas</button>
       <button class="btn btn-gold" id="auAjuste">🔧 Ajuste automático</button>
       <button class="btn btn-primary" id="auAuditar">🔍 Ejecutar auditoría</button>
     </div>
@@ -3100,18 +3095,6 @@ function vistaAuditor(el){
     const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
     const todosHorarios = DB.horarios;
     const problemas = [], avisos = [], info = [];
-
-    // ── 0. Materias duplicadas (misma clave y semestre repetidos) ──
-    const porClaveSem = {};
-    DB.materias.forEach(m=>{
-      if(!m.clave) return;
-      const k = m.clave+'|'+m.semestre;
-      (porClaveSem[k]=porClaveSem[k]||[]).push(m);
-    });
-    Object.values(porClaveSem).filter(lst=>lst.length>1).forEach(lst=>{
-      const nombres = lst.map(m=>`${esc(docente(m.docenteId)?.nombre||'sin docente')} (${DB.horarios.filter(h=>h.materiaId===m.id).length} clases)`);
-      problemas.push(`🔴 <strong>Materia duplicada:</strong> "${esc(lst[0].nombre)}" (${esc(lst[0].clave)}, ${lst[0].semestre}° sem.) existe <strong>${lst.length} veces</strong> en el sistema: ${nombres.join(' · ')}. Esto duplica sus clases en el horario. Ve a Materias y rubros y elimina las copias sobrantes.`);
-    });
 
     // ── 1. Choques de docente entre grupos ──
     const mapaDocDia = {}; // docenteId|dia|hi → [grupoId, materiaId]
@@ -3185,7 +3168,6 @@ function vistaAuditor(el){
   $('#auTabla').addEventListener('click', ()=>tablaCargaHoraria($('#auCiclo').value));
   $('#auBalance').addEventListener('click', ()=>modalBalanceCarga($('#auCiclo').value));
   $('#auAjuste').addEventListener('click', ()=>modalAjusteAutomatico($('#auCiclo').value));
-  $('#auLimpiar').addEventListener('click', ()=>modalLimpiarExcedidas($('#auCiclo').value));
   auditar(); // ejecutar al abrir
 }
 
@@ -3234,7 +3216,7 @@ function tablaCargaHoraria(ciclo){
           <th>Total h/sem</th><th>Días</th><th>Huecos</th><th>Estado</th></tr></thead>
         <tbody>
         ${cargaData.map(cd=>`<tr>
-          <td style="text-align:left"><a href="#" class="verDesglose" data-doc="${cd.docente.id}" style="color:var(--azul-500);text-decoration:none;font-weight:600">${esc(cd.docente.nombre)}</a></td>
+          <td style="text-align:left"><strong>${esc(cd.docente.nombre)}</strong></td>
           ${DIAS.map(dia=>{
             const cls = cd.porDia[dia];
             const bloqueCount = {};
@@ -3255,47 +3237,13 @@ function tablaCargaHoraria(ciclo){
       </table></div>
     </div>`;
   $('#auResultados').innerHTML = html;
-  $('#auResultados').querySelectorAll('.verDesglose').forEach(a=>a.addEventListener('click', e=>{
-    e.preventDefault(); desgloseMateriasDocente(a.dataset.doc, ciclo);
-  }));
 }
 
-/* Muestra qué materias tiene asignadas un docente y cuántas clases genera cada una */
-function desgloseMateriasDocente(docId, ciclo){
-  const d = docente(docId);
-  const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
-  const gids = new Set(grupos.map(g=>g.id));
-  const susMaterias = DB.materias.filter(m=>m.docenteId===docId);
-
-  const filas = susMaterias.map(m=>{
-    const clasesReales = DB.horarios.filter(h=>gids.has(h.grupoId)&&h.materiaId===m.id).length;
-    const gruposConEsta = [...new Set(DB.horarios.filter(h=>gids.has(h.grupoId)&&h.materiaId===m.id).map(h=>grupo(h.grupoId)?.nombre))].filter(Boolean);
-    return `<tr>
-      <td class="mono">${esc(m.clave||'—')}</td>
-      <td>${esc(m.nombre)}</td>
-      <td style="text-align:center">${m.semestre}°</td>
-      <td style="text-align:center">${m.sesionesSemana||0}</td>
-      <td style="text-align:center"><strong>${clasesReales}</strong></td>
-      <td style="font-size:.78rem">${esc(gruposConEsta.join(', ')||'sin horario')}</td>
-    </tr>`;
-  }).join('');
-
-  const totalClases = DB.horarios.filter(h=>gids.has(h.grupoId)&&materia(h.materiaId)?.docenteId===docId).length;
-
-  abrirModal(`📋 Materias de ${esc(d?.nombre||'')}`, `
-    <p class="muted">Estas son <strong>todas</strong> las materias asignadas a este docente y las clases que generan en el horario. Si ves materias que no le corresponden, edítalas en «Materias y rubros» y cámbiales el docente.</p>
-    <div class="table-wrap" style="margin-top:.7rem;max-height:340px;overflow-y:auto"><table style="font-size:.83rem">
-      <thead><tr><th>Clave</th><th>Materia</th><th>Sem.</th><th>Ses/sem</th><th>Clases</th><th>Grupos</th></tr></thead>
-      <tbody>${filas||'<tr><td colspan="6" class="muted" style="text-align:center;padding:1rem">Sin materias asignadas.</td></tr>'}</tbody>
-      <tfoot><tr style="border-top:2px solid var(--gris-300);font-weight:700">
-        <td colspan="4" style="text-align:right">Total de clases en el horario:</td>
-        <td style="text-align:center">${totalClases}</td><td></td></tr></tfoot>
-    </table></div>
-    <div class="aviso-box" style="background:var(--azul-100);border-radius:8px;padding:.6rem .8rem;font-size:.83rem;margin-top:.7rem">💡 El «Total h/sem» de la tabla es la suma de la columna «Clases». Si es mayor de lo esperado, este desglose te muestra exactamente qué materias lo componen.</div>
-    <div class="modal-foot"><button class="btn btn-primary" id="dmCerrar">Cerrar</button></div>`,
-  body=>body.querySelector('#dmCerrar').addEventListener('click', cerrarModal));
-}
-
+/* ═══════════════════════════════════════════════════════════════════════
+   AJUSTE AUTOMÁTICO
+   Detecta duplicados de docente (mismo bloque, dos grupos) y los reubica
+   automáticamente a un hueco libre, respetando grupo y docente.
+   ═══════════════════════════════════════════════════════════════════════ */
 /* ═══════════════════════════════════════════════════════════════════════
    BALANCEO DE CARGA DOCENTE
    Detecta docentes con carga > 28h (sin día libre posible) y propone pasar
@@ -3382,74 +3330,6 @@ function modalBalanceCarga(ciclo){
       persist('materias', cambios);
       cerrarModal(); render();
       toast(`${sugerencias.length} materia(s) reasignada(s). Ahora rearma el horario del plantel.`);
-    });
-  });
-}
-
-/* ═══════════════════════════════════════════════════════════════════════
-   LIMPIEZA DE SESIONES EXCEDIDAS
-   Cuando una materia tiene más clases asignadas de las configuradas
-   (sesionesSemana), esto suele deberse a haber armado el plantel más de
-   una vez sin reiniciar. Esta herramienta detecta el exceso por cada
-   (grupo, materia) y elimina las clases sobrantes, dejando exactamente
-   las sesiones configuradas (conserva las mejor distribuidas en la semana).
-   ═══════════════════════════════════════════════════════════════════════ */
-function modalLimpiarExcedidas(ciclo){
-  const grupos = DB.grupos.filter(g=>!g.ciclo||g.ciclo===ciclo);
-  const gids = new Set(grupos.map(g=>g.id));
-
-  const excesos = [];
-  grupos.forEach(g=>{
-    const mats = DB.materias.filter(m=>m.semestre===g.semestre && (m.sesionesSemana||0)>0);
-    mats.forEach(m=>{
-      const clases = DB.horarios.filter(h=>h.grupoId===g.id && h.materiaId===m.id)
-        .sort((a,b)=> DIAS.indexOf(a.dia)-DIAS.indexOf(b.dia) || a.hi.localeCompare(b.hi));
-      if(clases.length > m.sesionesSemana){
-        // Conservar las primeras (mejor repartidas por día distinto); sobrantes = el resto
-        const diasVistos = new Set(); const conservar = []; const sobrantes = [];
-        clases.forEach(c=>{
-          if(conservar.length < m.sesionesSemana && !diasVistos.has(c.dia)){
-            conservar.push(c); diasVistos.add(c.dia);
-          } else sobrantes.push(c);
-        });
-        // Si aún faltan por recortar (varias el mismo día), completar desde el resto
-        while(conservar.length < m.sesionesSemana && sobrantes.length){ conservar.push(sobrantes.shift()); }
-        excesos.push({grupo:g, materia:m, configuradas:m.sesionesSemana, actuales:clases.length, sobrantes});
-      }
-    });
-  });
-
-  if(!excesos.length){
-    abrirModal('🧹 Sesiones excedidas', `<div class="vacio"><span class="icono">✅</span>No hay materias con más clases de las configuradas en el ciclo ${esc(ciclo)}.</div>
-      <div class="modal-foot"><button class="btn btn-primary" id="lxCerrar">Entendido</button></div>`,
-      body=>body.querySelector('#lxCerrar').addEventListener('click', cerrarModal));
-    return;
-  }
-
-  const totalSobrantes = excesos.reduce((a,e)=>a+e.sobrantes.length,0);
-  const filas = excesos.map(e=>`<tr>
-    <td>${esc(e.materia.nombre)}</td><td>${esc(e.grupo.nombre)}</td>
-    <td style="text-align:center">${e.configuradas}</td>
-    <td style="text-align:center"><span class="tag tag-mal">${e.actuales}</span></td>
-    <td style="text-align:center"><strong>${e.sobrantes.length}</strong></td></tr>`).join('');
-
-  abrirModal('🧹 Quitar sesiones excedidas', `
-    <p class="muted">Se detectaron <strong>${excesos.length}</strong> materia(s) con más clases de las configuradas — normalmente por haber armado el horario del plantel más de una vez. Se eliminarán las clases sobrantes, dejando exactamente las sesiones configuradas de cada una:</p>
-    <div class="table-wrap" style="max-height:300px;overflow-y:auto;margin-top:.6rem"><table style="font-size:.83rem">
-      <thead><tr><th>Materia</th><th>Grupo</th><th>Config.</th><th>Actuales</th><th>A quitar</th></tr></thead>
-      <tbody>${filas}</tbody></table></div>
-    <div class="aviso-box" style="background:var(--aviso-bg);color:var(--aviso);border-radius:8px;padding:.6rem .8rem;font-size:.83rem;margin-top:.7rem">⚠️ Se eliminarán <strong>${totalSobrantes}</strong> clase(s) en total. Esta acción no se puede deshacer.</div>
-    <div class="modal-foot"><button class="btn btn-outline" id="lxCan">Cancelar</button>
-    <button class="btn btn-danger" id="lxOk">Quitar ${totalSobrantes} clase(s) sobrante(s)</button></div>`,
-  body=>{
-    body.querySelector('#lxCan').addEventListener('click', cerrarModal);
-    body.querySelector('#lxOk').addEventListener('click', ()=>{
-      const idsBorrar = new Set();
-      excesos.forEach(e=>e.sobrantes.forEach(c=>idsBorrar.add(c.id)));
-      DB.horarios = DB.horarios.filter(h=>!idsBorrar.has(h.id));
-      persistDel('horarios', [...idsBorrar]);
-      cerrarModal(); render();
-      toast(`${idsBorrar.size} clase(s) sobrante(s) eliminada(s). Revisa la tabla de carga para confirmar.`);
     });
   });
 }
