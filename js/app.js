@@ -1901,6 +1901,8 @@ function vistaCredenciales(el){
     zona.innerHTML = lista.length ? lista.map(a=>`
       <div class="credencial">
         <div class="cred-franja"><strong>PREPARATORIA No. 50 · UAGro</strong><span>${esc(grupo(a.grupoId)?.ciclo||DB.plantel.ciclo)}</span></div>
+        <div class="cred-cuerpo">
+          <div class="cred-qr" id="qr_${a.id}"></div>
           <div class="cred-datos">
             <h4>${esc(nombreCompleto(a))}</h4>
             <p class="mono">${esc(a.matricula)}</p>
@@ -1913,8 +1915,8 @@ function vistaCredenciales(el){
 
     if(typeof QRCode !== 'undefined'){
       lista.forEach(a=>{
-        new QRCode(document.getElementById('qr_'+a.id),
-          {text:`P50|${a.matricula}`, width:96, height:96, correctLevel:QRCode.CorrectLevel.M});
+        const cont = document.getElementById('qr_'+a.id);
+        if(cont) new QRCode(cont, {text:`P50|${a.matricula}`, width:96, height:96, correctLevel:QRCode.CorrectLevel.M});
       });
     } else {
       toast('La librería QR no cargó: revisa tu conexión a internet.');
