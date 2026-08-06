@@ -1,4 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { isFeatureEnabled } from '../../config/featureFlags'
+
 export interface Caracteristica {
   id: string
   nombre: string
@@ -7,6 +9,7 @@ export interface Caracteristica {
   componente: () => Promise<any>
   descripcion: string
   modulo: 'alumnos' | 'docentes' | 'configuracion'
+  flagKey?: string
 }
 
 export const CARACTERISTICAS: Caracteristica[] = [
@@ -18,6 +21,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'alumnos',
     descripcion: 'Gestión de alumnos SIGE50',
     componente: () => import('../../modulos/alumnos/AlumnosPagina'),
+    flagKey: 'USE_NEW_ALUMNOS',
   },
   {
     id: 'asistencia',
@@ -27,6 +31,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'alumnos',
     descripcion: 'Control de asistencia',
     componente: () => import('../../modulos/alumnos/AsistenciaPagina'),
+    flagKey: 'USE_NEW_ASISTENCIA',
   },
   {
     id: 'calificaciones',
@@ -36,6 +41,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'alumnos',
     descripcion: 'Gestión de calificaciones',
     componente: () => import('../../modulos/alumnos/CalificacionesPagina'),
+    flagKey: 'USE_NEW_CALIFICACIONES',
   },
   {
     id: 'docentes',
@@ -45,6 +51,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'docentes',
     descripcion: 'Gestión de docentes',
     componente: () => import('../../modulos/docentes/DocentesPagina'),
+    flagKey: 'USE_NEW_DOCENTES',
   },
   {
     id: 'materias',
@@ -54,6 +61,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'docentes',
     descripcion: 'Catálogo de materias',
     componente: () => import('../../modulos/docentes/MateriasPagina'),
+    flagKey: 'USE_NEW_MATERIAS',
   },
   {
     id: 'grupos',
@@ -63,6 +71,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'docentes',
     descripcion: 'Gestión de grupos',
     componente: () => import('../../modulos/docentes/GruposPagina'),
+    flagKey: 'USE_NEW_GRUPOS',
   },
   {
     id: 'horarios',
@@ -72,6 +81,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'docentes',
     descripcion: 'Configuración de horarios',
     componente: () => import('../../modulos/docentes/HorariosPagina'),
+    flagKey: 'USE_NEW_HORARIOS',
   },
   {
     id: 'configuracion',
@@ -81,8 +91,13 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'configuracion',
     descripcion: 'Configuración del sistema',
     componente: () => import('../../modulos/configuracion/ConfiguracionPagina'),
+    flagKey: 'USE_NEW_CONFIGURACION',
   },
 ]
+
+export const CARACTERISTICAS_ACTIVAS = CARACTERISTICAS.filter(
+  (c) => !c.flagKey || isFeatureEnabled(c.flagKey as any)
+)
 
 export const obtenerCaracteristica = (id: string): Caracteristica | undefined =>
   CARACTERISTICAS.find((c) => c.id === id)
