@@ -12,18 +12,18 @@ import {
   orderBy,
   onSnapshot,
   DocumentData,
-  QueryConstraint,
+  Query,
   Unsubscribe,
 } from 'firebase/firestore'
 
 export class FirebaseClient<T extends DocumentData> {
-  private nombreColeccion: string
+  protected nombreColeccion: string
 
   constructor(nombreColeccion: string) {
     this.nombreColeccion = nombreColeccion
   }
 
-  private get ref() {
+  protected get ref() {
     return collection(obtenerDb(), this.nombreColeccion)
   }
 
@@ -33,9 +33,8 @@ export class FirebaseClient<T extends DocumentData> {
     return snap.exists() ? (snap.data() as T) : null
   }
 
-  async obtenerTodos(...constraints: QueryConstraint[]): Promise<T[]> {
-    const q = query(this.ref, ...constraints)
-    const snap = await getDocs(q)
+  async obtenerTodos(q?: Query<DocumentData>): Promise<T[]> {
+    const snap = await getDocs(q || this.ref)
     return snap.docs.map((d) => d.data() as T)
   }
 
@@ -54,12 +53,8 @@ export class FirebaseClient<T extends DocumentData> {
     await deleteDoc(docRef)
   }
 
-  escucharCambios(
-    callback: (datos: T[]) => void,
-    ...constraints: QueryConstraint[]
-  ): Unsubscribe {
-    const q = query(this.ref, ...constraints)
-    return onSnapshot(q, (snap) => {
+  escucharCambios(callback: (datos: T[]) => void, q?: Query<DocumentData>): Unsubscribe {
+    return onSnapshot(q || this.ref, (snap) => {
       callback(snap.docs.map((d) => d.data() as T))
     })
   }
