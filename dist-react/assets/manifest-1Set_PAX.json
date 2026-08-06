@@ -1,0 +1,26 @@
+{
+  "name": "SIGE Prepa 50 · UAGro",
+  "short_name": "SIGE P50",
+  "description": "Sistema escolar de la Preparatoria No. 50 de la UAGro: asistencia con QR, calificaciones y portal de padres.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B2342",
+  "theme_color": "#0B2342",
+  "lang": "es-MX",
+  "icons": [
+    {
+      "src": "icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
