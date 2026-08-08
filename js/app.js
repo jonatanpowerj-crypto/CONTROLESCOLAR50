@@ -1940,11 +1940,35 @@ function vistaConsultas(el){
   </div>
   <div id="resConsulta"></div>`;
 
-  const consultar = ()=>{
+  const consultar = async ()=>{
     const mat = $('#busMatricula').value.trim().toUpperCase();
-    const a = DB.alumnos.find(x=>x.matricula===mat);
     const res = $('#resConsulta');
-    if(!a){ res.innerHTML = `<div class="vacio card"><span class="icono">🔎</span>No se encontró la matrícula <strong class="mono">${esc(mat)}</strong>. Verifica que esté escrita igual que en la credencial.</div>`; return; }
+    
+    if(!mat){ res.innerHTML = `<div class="vacio card"><span class="icono">⚠️</span>Escribe una matrícula para consultar.</div>`; return; }
+    
+    res.innerHTML = `<div class="vacio card"><span class="icono">⏳</span>Buscando información...</div>`;
+    
+    let a;
+    
+    // SEGURIDAD: En modo nube con portal público, usar lectura puntual por matrícula
+    // En modo local o con sesión, buscar en DB local
+    if(typeof obtenerAlumnoPorMatricula !== 'undefined' && MODO === 'nube' && modoConsulta && !usuarioActual) {
+      // Modo nube con portal público: lectura segura
+      a = await obtenerAlumnoPorMatricula(mat);
+      if(a) {
+        // Guardar temporalmente en DB.alumnos para que funcione el resto del código
+        // Solo guardamos ESTE alumno, no todos
+        DB.alumnos = [a];
+      }
+    } else {
+      // Modo local o con sesión: buscar en DB local
+      a = DB.alumnos.find(x=>x.matricula===mat);
+    }
+    
+    if(!a){ 
+      res.innerHTML = `<div class="vacio card"><span class="icono">🔎</span>No se encontró la matrícula <strong class="mono">${esc(mat)}</strong>. Verifica que esté escrita igual que en la credencial.</div>`; 
+      return; 
+    }
 
     const g = grupo(a.grupoId);
     const materiasGrupo = [...new Set(DB.horarios.filter(h=>h.grupoId===a.grupoId).map(h=>h.materiaId))]

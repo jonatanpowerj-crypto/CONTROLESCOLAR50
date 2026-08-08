@@ -106,7 +106,19 @@ function iniciarSistema(){
 /* ───────── Sincronización en tiempo real ───────── */
 function suscribirNube(){
   if(suscrito) return; suscrito = true;
+  
+  // Determinar si es modo consulta pública (sin sesión)
+  const esModoPortalPublico = modoConsulta && !usuarioActual;
+  
   COLECCIONES.forEach(col=>{
+    // SEGURIDAD: En modo portal público, NO suscribir 'alumnos' completo
+    // En su lugar, se hará lectura puntual por matrícula en la vista de consultas
+    if(esModoPortalPublico && col === 'alumnos') {
+      // Los alumnos se cargan bajo demanda en vistaConsultas
+      // No hacer suscripción completa aquí
+      return;
+    }
+    
     fsdb.collection(col).onSnapshot(snap=>{
       DB[col] = snap.docs.map(d=>d.data());
       // Al cargar docentes/materias, refrescar el vínculo del docente en sesión
@@ -141,25 +153,129 @@ function programarRender(){
   }, 250);
 }
 
+/* ───────── Lectura segura de UN alumno por matrícula ───────── */
+/**
+ * Obtiene un alumno puntual de Firestore usando su matrícula como ID.
+ * Esta función es para el portal público: solo descarga UN documento,
+ * no la colección completa.
+ * 
+ * @param {string} matricula - La matrícula del alumno (ej. "A1001")
+ * @returns {Promise<object|null>} - Los datos del alumno o null si no existe
+ */
+async function obtenerAlumnoPorMatricula(matricula) {
+  if(MODO !== 'nube' || !fsdb) return null;
+  try {
+    const docRef = fsdb.collection('alumnos').doc(matricula);
+    const docSnap = await docRef.get();
+    if(docSnap.exists) {
+      return docSnap.data();
+    }
+    return null;
+  } catch (err) {
+    console.warn('Error al obtener alumno:', err);
+    return null;
+  }
+}
+
+/* ───────── Lectura de calificaciones del alumno (subcolección) ───────── */
+/**
+ * Obtiene las calificaciones de un alumno desde su subcolección.
+ * 
+ * @param {string} matricula - La matrícula del alumno
+ * @returns {Promise<Array>} - Array de calificaciones
+ */
+async function obtenerCalificacionesAlumno(matricula) {
+  if(MODO !== 'nube' || !fsdb) return [];
+  try {
+    const snapshot = await fsdb.collection('alumnos').doc(matricula)
+      .collection('calificaciones').get();
+    return snapshot.docs.map(d => d.data());
+  } catch (err) {
+    console.warn('Error al obtener calificaciones:', err);
+    return [];
+  }
+}
+
+/* ───────── Lectura de asistencia del alumno (subcolección) ───────── */
+/**
+ * Obtiene la asistencia de un alumno desde su subcolección.
+ * 
+ * @param {string} matricula - La matrícula del alumno
+ * @returns {Promise<Array>} - Array de registros de asistencia
+ */
+async function obtenerAsistenciasAlumno(matricula) {
+  if(MODO !== 'nube' || !fsdb) return [];
+  try {
+    const snapshot = await fsdb.collection('alumnos').doc(matricula)
+      .collection('asistencias').get();
+    return snapshot.docs.map(d => d.data());
+  } catch (err) {
+    console.warn('Error al obtener asistencia:', err);
+    return [];
+  }
+}
+
 /* ───────── Escritura unificada (la usa toda la app) ───────── */
+/**
+ * Guarda datos en Firestore.
+ * Las colecciones 'calificaciones' y 'asistencias' se guardan como
+ * subcolecciones de 'alumnos/{matricula}/' usando el campo alumnoId (matrícula).
+ */
 function persist(col, objs){
   guardarLocal();
   if(MODO!=='nube' || !fsdb) return;
   const lista = (Array.isArray(objs)?objs:[objs]).filter(Boolean);
+  
+  // Colecciones que van como subcolecciones de alumnos
+  const esSubcoleccion = (col === 'calificaciones' || col === 'asistencias');
+  
   for(let i=0;i<lista.length;i+=400){
     const lote = fsdb.batch();
-    lista.slice(i,i+400).forEach(o=>
-      lote.set(fsdb.collection(col).doc(String(o.id)), JSON.parse(JSON.stringify(o))));
+    lista.slice(i,i+400).forEach(o=>{
+      if(esSubcoleccion && o.alumnoId) {
+        // Guardar como subcolección: alumnos/{matricula}/col/{id}
+        // El ID del documento debe incluir la matrícula
+        const docId = `${o.alumnoId}_${o.id}`;
+        lote.set(
+          fsdb.collection('alumnos').doc(o.alumnoId)
+              .collection(col).doc(String(docId)),
+          JSON.parse(JSON.stringify(o))
+        );
+      } else {
+        // Colección raíz normal
+        lote.set(fsdb.collection(col).doc(String(o.id)), JSON.parse(JSON.stringify(o)));
+      }
+    });
     lote.commit().catch(()=>toast('Cambio guardado en este equipo; se sincronizará al recuperar conexión.'));
   }
 }
+
+/**
+ * Elimina documentos de Firestore.
+ */
 function persistDel(col, ids){
   guardarLocal();
   if(MODO!=='nube' || !fsdb) return;
   const lista = (Array.isArray(ids)?ids:[ids]).filter(Boolean);
+  
+  // Colecciones que van como subcolecciones de alumnos
+  const esSubcoleccion = (col === 'calificaciones' || col === 'asistencias');
+  
   for(let i=0;i<lista.length;i+=400){
     const lote = fsdb.batch();
-    lista.slice(i,i+400).forEach(id=>lote.delete(fsdb.collection(col).doc(String(id))));
+    lista.slice(i,i+400).forEach(item=>{
+      if(esSubcoleccion && typeof item === 'object' && item.alumnoId) {
+        // Eliminar de subcolección
+        const docId = `${item.alumnoId}_${item.id}`;
+        lote.delete(
+          fsdb.collection('alumnos').doc(item.alumnoId)
+              .collection(col).doc(String(docId))
+        );
+      } else {
+        // Colección raíz normal
+        lote.delete(fsdb.collection(col).doc(String(item)));
+      }
+    });
     lote.commit().catch(()=>{});
   }
 }
