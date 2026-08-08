@@ -7,5 +7,14 @@ export default defineConfig({
   build: {
     outDir: 'dist-react',
     emptyOutDir: true
-  }
+  },
+  server: {
+    host: '0.0.0.0',
+    port: 12000,
+    strictPort: true,
+    allowedHosts: ['.prod-runtime.all-hands.dev'],
+    hmr: {
+      clientPort: 443,
+    },
+  },
 })
