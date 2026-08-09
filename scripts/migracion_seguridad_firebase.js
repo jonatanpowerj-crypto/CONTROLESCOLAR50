@@ -11,6 +11,9 @@
  * 3. Preparará la estructura de subcolecciones para calificaciones/asistencias
  * 
  * ADVERTENCIA: Ejecutar UNA SOLA VEZ. Si ya se ejecutó, NO volver a ejecutar.
+ * 
+ * Uso:
+ *   node scripts/migracion_seguridad_firebase.js
  * ════════════════════════════════════════════════════════════════
  */
 
@@ -19,21 +22,33 @@ const fs = require('fs');
 const path = require('path');
 
 // ─── Configuración ───
-const PROJECT_ID = 'prepa50'; // Cambiar por el ID del proyecto Firebase
+const SECRETS_DIR = path.join(__dirname, '..', 'secrets');
+const CREDENTIALS_FILE = path.join(SECRETS_DIR, 'serviceAccountKey.json');
 const BACKUP_DIR = path.join(__dirname, '..', 'backups');
 
-// Inicializar Firebase Admin
+// Cargar credenciales de Firebase desde secrets/
+let serviceAccount;
+try {
+  serviceAccount = require(CREDENTIALS_FILE);
+  console.log(`✅ Credenciales cargadas desde: ${CREDENTIALS_FILE}`);
+} catch (err) {
+  console.error(`❌ Error al cargar credenciales: ${err.message}`);
+  console.error(`   Asegúrate de que existe: ${CREDENTIALS_FILE}`);
+  process.exit(1);
+}
+
+// Inicializar Firebase Admin con credenciales
 admin.initializeApp({
-  projectId: PROJECT_ID,
-  // Para producción local, usar:
-  // credential: admin.credential.applicationDefault()
+  credential: admin.credential.cert(serviceAccount)
 });
 
 const db = admin.firestore();
+const PROJECT_ID = serviceAccount.project_id;
 
 async function migrate() {
   console.log('═══════════════════════════════════════════════');
   console.log('  MIGRACIÓN DE SEGURIDAD - SIGE Prepa 50');
+  console.log(`  Proyecto: ${PROJECT_ID}`);
   console.log('═══════════════════════════════════════════════\n');
 
   // ─── 1. RESPALDO DE ALUMNOS ───
