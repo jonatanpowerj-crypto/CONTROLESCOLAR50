@@ -1,21 +1,26 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, ComponentType } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { CARACTERISTICAS_ACTIVAS, Caracteristica } from './caracteristicas'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 const Cargando = () => (
   <div className="cargando">
     <span className="spinner"></span>
-    <p>Cargando mÃ³dulo...</p>
+    <p>Cargando módulo...</p>
   </div>
 )
 
-const PaginaDinamica = ({ getComponente }: { getComponente: () => Promise<any> }) => {
+// Tipo para componente lazy
+type ComponenteLazy = () => Promise<{ default: ComponentType<unknown> }>
+
+const PaginaDinamica = ({ getComponente }: { getComponente: ComponenteLazy }) => {
   const Componente = lazy(getComponente)
   return (
-    <Suspense fallback={<Cargando />}>
-      <Componente />
-    </Suspense>
+    <ErrorBoundary>
+      <Suspense fallback={<Cargando />}>
+        <Componente />
+      </Suspense>
+    </ErrorBoundary>
   )
 }
 
