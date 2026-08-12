@@ -1,5 +1,8 @@
 node_modules/
 dist-react/
+
 .env
+.env.local
+
 *.log
 *.ps1
