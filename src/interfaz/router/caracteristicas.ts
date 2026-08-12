@@ -1,15 +1,18 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import { isFeatureEnabled } from '../../config/featureFlags'
+import { ComponentType } from 'react'
+import { isFeatureEnabled, FeatureFlagKey } from '../../config/featureFlags'
+
+// Tipo compatible con React.lazy()
+export type GetComponent = () => Promise<{ default: ComponentType<unknown> }>
 
 export interface Caracteristica {
   id: string
   nombre: string
   ruta: string
   icono: string
-  componente: () => Promise<any>
+  componente: GetComponent
   descripcion: string
   modulo: 'alumnos' | 'docentes' | 'configuracion'
-  flagKey?: string
+  flagKey?: FeatureFlagKey
 }
 
 export const CARACTERISTICAS: Caracteristica[] = [
@@ -17,87 +20,91 @@ export const CARACTERISTICAS: Caracteristica[] = [
     id: 'alumnos',
     nombre: 'Alumnos',
     ruta: '/alumnos',
-    icono: '👨‍🎓',
+    icono: '?????',
     modulo: 'alumnos',
-    descripcion: 'Gestión de alumnos SIGE50',
-    componente: () => import('../../modulos/alumnos/AlumnosPagina'),
+    descripcion: 'Gesti�n de alumnos SIGE50',
+    componente: () => import('../../modulos/alumnos/AlumnosPagina').then((mod) => ({ default: mod.AlumnosPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_ALUMNOS',
   },
   {
     id: 'asistencia',
     nombre: 'Asistencia',
     ruta: '/asistencia',
-    icono: '📋',
+    icono: '??',
     modulo: 'alumnos',
     descripcion: 'Control de asistencia',
-    componente: () => import('../../modulos/alumnos/AsistenciaPagina'),
+    componente: () => import('../../modulos/alumnos/AsistenciaPagina').then((mod) => ({ default: mod.AsistenciaPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_ASISTENCIA',
   },
   {
     id: 'calificaciones',
     nombre: 'Calificaciones',
     ruta: '/calificaciones',
-    icono: '📊',
+    icono: '??',
     modulo: 'alumnos',
-    descripcion: 'Gestión de calificaciones',
-    componente: () => import('../../modulos/alumnos/CalificacionesPagina'),
+    descripcion: 'Gesti�n de calificaciones',
+    componente: () => import('../../modulos/alumnos/CalificacionesPagina').then((mod) => ({ default: mod.CalificacionesPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_CALIFICACIONES',
   },
   {
     id: 'docentes',
     nombre: 'Docentes',
     ruta: '/docentes',
-    icono: '👨‍🏫',
+    icono: '?????',
     modulo: 'docentes',
-    descripcion: 'Gestión de docentes',
-    componente: () => import('../../modulos/docentes/DocentesPagina'),
+    descripcion: 'Gesti�n de docentes',
+    componente: () => import('../../modulos/docentes/DocentesPagina').then((mod) => ({ default: mod.DocentesPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_DOCENTES',
   },
   {
     id: 'materias',
     nombre: 'Materias',
     ruta: '/materias',
-    icono: '📚',
+    icono: '??',
     modulo: 'docentes',
-    descripcion: 'Catálogo de materias',
-    componente: () => import('../../modulos/docentes/MateriasPagina'),
+    descripcion: 'Cat�logo de materias',
+    componente: () => import('../../modulos/docentes/MateriasPagina').then((mod) => ({ default: mod.MateriasPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_MATERIAS',
   },
   {
     id: 'grupos',
     nombre: 'Grupos',
     ruta: '/grupos',
-    icono: '👥',
+    icono: '??',
     modulo: 'docentes',
-    descripcion: 'Gestión de grupos',
-    componente: () => import('../../modulos/docentes/GruposPagina'),
+    descripcion: 'Gesti�n de grupos',
+    componente: () => import('../../modulos/docentes/GruposPagina').then((mod) => ({ default: mod.GruposPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_GRUPOS',
   },
   {
     id: 'horarios',
     nombre: 'Horarios',
     ruta: '/horarios',
-    icono: '🕐',
+    icono: '??',
     modulo: 'docentes',
-    descripcion: 'Configuración de horarios',
-    componente: () => import('../../modulos/docentes/HorariosPagina'),
+    descripcion: 'Configuraci�n de horarios',
+    componente: () => import('../../modulos/docentes/HorariosPagina').then((mod) => ({ default: mod.HorariosPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_HORARIOS',
   },
   {
     id: 'configuracion',
-    nombre: 'Configuración',
+    nombre: 'Configuraci�n',
     ruta: '/configuracion',
-    icono: '⚙️',
+    icono: '??',
     modulo: 'configuracion',
-    descripcion: 'Configuración del sistema',
-    componente: () => import('../../modulos/configuracion/ConfiguracionPagina'),
+    descripcion: 'Configuraci�n del sistema',
+    componente: () => import('../../modulos/configuracion/ConfiguracionPagina').then((mod) => ({ default: mod.ConfiguracionPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_CONFIGURACION',
   },
 ]
 
-export const CARACTERISTICAS_ACTIVAS = CARACTERISTICAS.filter(
-  (c) => !c.flagKey || isFeatureEnabled(c.flagKey as any)
-)
+// Filtrar caracter�sticas activas (con flag habilitada)
+// Si no hay ninguna activa, mantener todas como fallback para desarrollo
+export const CARACTERISTICAS_ACTIVAS: Caracteristica[] = (() => {
+  const activas = CARACTERISTICAS.filter((c) => !c.flagKey || isFeatureEnabled(c.flagKey))
+  // Fallback: si no hay m�dulos activos, devolver todos (modo desarrollo)
+  return activas.length > 0 ? activas : CARACTERISTICAS
+})()
 
 export const obtenerCaracteristica = (id: string): Caracteristica | undefined =>
   CARACTERISTICAS.find((c) => c.id === id)
