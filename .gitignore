@@ -1,0 +1,5 @@
+node_modules/
+dist-react/
+.env
+*.log
+*.ps1

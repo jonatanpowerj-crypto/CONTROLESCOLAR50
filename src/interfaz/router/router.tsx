@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { Suspense, lazy } from 'react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import { CARACTERISTICAS, Caracteristica } from './características'
+import { CARACTERISTICAS_ACTIVAS, Caracteristica } from './caracteristicas'
 
 const Cargando = () => (
   <div className="cargando">
@@ -23,7 +23,7 @@ interface RouterProps {
   caracteristicas?: Caracteristica[]
 }
 
-export const Router = ({ caracteristicas = CARACTERISTICAS }: RouterProps) => {
+export const Router = ({ caracteristicas = CARACTERISTICAS_ACTIVAS }: RouterProps) => {
   return (
     <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
@@ -43,5 +43,5 @@ export const Router = ({ caracteristicas = CARACTERISTICAS }: RouterProps) => {
   )
 }
 
-export { CARACTERISTICAS } from './características'
-export type { Caracteristica } from './características'
+export { CARACTERISTICAS, CARACTERISTICAS_ACTIVAS } from './caracteristicas'
+export type { Caracteristica } from './caracteristicas'
