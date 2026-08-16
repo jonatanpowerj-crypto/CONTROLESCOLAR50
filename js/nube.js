@@ -1,31 +1,39 @@
-/* ════════════════════════════════════════════════════════════════
+/* ============================================================
    SIGE Prepa 50 — Capa de nube (Firebase)
-   - MODO 'nube': Firestore en tiempo real + inicio de sesión.
-   - MODO 'local': localStorage, como la versión original.
-   La aplicación (app.js) escribe SIEMPRE a través de persist() y
-   persistDel(); esta capa decide a dónde van los datos.
-   ════════════════════════════════════════════════════════════════ */
+   - MODO 'nube': Firestore en tiempo real + inicio de sesion.
+   - MODO 'local': localStorage, como la version original.
+   La aplicacion (app.js) escribe SIEMPRE a traves de persist() y
+   persistDel(); esta capa decide a donde van los datos.
+   ============================================================ */
 'use strict';
 
 let MODO = 'local';
 let fsdb = null, authFB = null, usuarioActual = null, modoConsulta = false;
-/* Perfil del usuario en sesión: rol y docente vinculado */
+/* Perfil del usuario en sesion: rol y docente vinculado */
 let PERFIL = { rol:'admin', docenteId:null, email:null };
-const ADMIN_EMAILS = ['jonatan33@uagro.mx'];  // correos con rol de administrador
-const PASS_TEMPORAL = 'Prepa50.2026';          // contraseña genérica de primer ingreso
+
+// Respaldo de arranque UNICAMENTE: si la coleccion "usuarios" en
+// Firestore todavia no tiene ningun documento con rol admin (por
+// ejemplo la primera vez que se activa el sistema), este correo
+// se trata como administrador para que siempre exista al menos
+// una cuenta que pueda dar de alta al resto. En cuanto exista el
+// documento correspondiente en usuarios/{uid}, ESE documento manda
+// y este arreglo deja de tener efecto para esa cuenta.
+const ADMIN_EMAILS_RESPALDO = ['jonatan33@uagro.mx'];
+
 const COLECCIONES = ['docentes','materias','grupos','alumnos','horarios','asistencias','calificaciones','bitacora','calendario'];
 let suscrito = false, renderTimer = null;
 
-/* ¿El usuario en sesión es administrador? */
+/* ¿El usuario en sesion es administrador? */
 function esAdmin(){ return MODO!=='nube' || PERFIL.rol==='admin'; }
 
-/* Identidad corta del usuario en sesión para registrar autoría.
+/* Identidad corta del usuario en sesion para registrar autoria.
    Devuelve el correo (o 'local' en modo sin nube). */
 function autorActual(){
   if(MODO!=='nube') return 'local';
   return (usuarioActual && usuarioActual.email) || 'desconocido';
 }
-/* Sella un objeto con autoría: quién y cuándo lo creó/modificó. */
+/* Sella un objeto con autoria: quien y cuando lo creo/modifico. */
 function sellarAutoria(obj, esNuevo){
   const ahora = new Date().toISOString();
   if(esNuevo && !obj.creadoPor){ obj.creadoPor = autorActual(); obj.creadoEn = ahora; }
@@ -34,7 +42,7 @@ function sellarAutoria(obj, esNuevo){
   return obj;
 }
 
-/* IDs de las materias que el docente en sesión puede gestionar.
+/* IDs de las materias que el docente en sesion puede gestionar.
    Admin = todas. Docente = solo las suyas (por docenteId en cada materia). */
 function materiasPermitidas(){
   if(esAdmin()) return DB.materias.map(m=>m.id);
@@ -48,16 +56,35 @@ function gruposPermitidos(){
   return [...new Set(DB.horarios.filter(h=>mids.includes(h.materiaId)).map(h=>h.grupoId))];
 }
 
-/* Calcula el perfil a partir del correo: admin por lista, o docente
-   buscando su correo en el módulo Docentes (campo email). */
-function calcularPerfil(email){
+/* Calcula el perfil consultando la coleccion "usuarios/{uid}" en
+   Firestore — la misma que ya usan las reglas de seguridad del
+   servidor. Esto es lo que de verdad determina el rol; el arreglo
+   ADMIN_EMAILS_RESPALDO y la busqueda por correo en "docentes" solo
+   se usan como respaldo si esa cuenta todavia no tiene su documento
+   de rol creado (por ejemplo, antes de correr el script de
+   migracion la primera vez). */
+async function calcularPerfil(uid, email){
   const correo = (email||'').toLowerCase();
-  if(ADMIN_EMAILS.includes(correo)) return { rol:'admin', docenteId:null, email:correo };
+
+  if(fsdb){
+    try{
+      const snap = await fsdb.collection('usuarios').doc(uid).get();
+      if(snap.exists){
+        const datos = snap.data();
+        return { rol: datos.rol || 'docente', docenteId: datos.docenteId || null, email: correo };
+      }
+    }catch(e){
+      console.warn('No se pudo leer el perfil en "usuarios", usando respaldo.', e);
+    }
+  }
+
+  // Respaldo: sin documento en "usuarios" todavia.
+  if(ADMIN_EMAILS_RESPALDO.includes(correo)) return { rol:'admin', docenteId:null, email:correo };
   const doc = DB.docentes.find(d=>(d.email||'').toLowerCase()===correo);
   return { rol:'docente', docenteId: doc?doc.id:null, email:correo };
 }
 
-/* ¿El docente ya pegó su configuración de Firebase? */
+/* ¿El docente ya pego su configuracion de Firebase? */
 function nubeConfigurada(){
   try{
     return typeof firebase !== 'undefined' && typeof FIREBASE_CONFIG !== 'undefined' &&
@@ -72,15 +99,15 @@ function iniciarSistema(){
     firebase.initializeApp(FIREBASE_CONFIG);
     authFB = firebase.auth();
     fsdb = firebase.firestore();
-    try{ fsdb.enablePersistence({synchronizeTabs:true}); }catch(_){ /* varias pestañas: continúa sin caché */ }
+    try{ fsdb.enablePersistence({synchronizeTabs:true}); }catch(_){ /* varias pestanas: continua sin cache */ }
 
     prepararLogin();
-    authFB.onAuthStateChanged(u=>{
+    authFB.onAuthStateChanged(async u=>{
       usuarioActual = u;
       if(u){                       // docente autenticado
         modoConsulta = false;
         document.body.classList.remove('solo-portal');
-        PERFIL = calcularPerfil(u.email);
+        PERFIL = await calcularPerfil(u.uid, u.email);
         ocultarLogin(); suscribirNube(); pintarSesion();
         // ¿Primer ingreso? (lo marcamos por dispositivo al cambiar contraseña)
         if(!localStorage.getItem('p50_pass_ok_'+u.uid) && !esAdmin()){
@@ -103,20 +130,20 @@ function iniciarSistema(){
   }
 }
 
-/* ───────── Sincronización en tiempo real ───────── */
+/* ───────── Sincronizacion en tiempo real ───────── */
 function suscribirNube(){
   if(suscrito) return; suscrito = true;
   COLECCIONES.forEach(col=>{
-    fsdb.collection(col).onSnapshot(snap=>{
+    fsdb.collection(col).onSnapshot(async snap=>{
       DB[col] = snap.docs.map(d=>d.data());
-      // Al cargar docentes/materias, refrescar el vínculo del docente en sesión
+      // Al cargar docentes/materias, refrescar el vinculo del docente en sesion
       if((col==='docentes'||col==='materias') && usuarioActual && !esAdmin()){
-        PERFIL = calcularPerfil(usuarioActual.email);
+        PERFIL = await calcularPerfil(usuarioActual.uid, usuarioActual.email);
       }
       programarRender();
     }, err=>{
       console.warn('Lectura de '+col, err);
-      toast('No fue posible leer "'+col+'". Revisa las reglas de Firestore o tu conexión.');
+      toast('No fue posible leer "'+col+'". Revisa las reglas de Firestore o tu conexion.');
     });
   });
   fsdb.collection('config').doc('plantel').onSnapshot(doc=>{
@@ -126,7 +153,7 @@ function suscribirNube(){
 }
 
 /* Re-dibuja la vista cuando llegan datos de otros dispositivos,
-   sin interrumpir al docente (no si está escribiendo, escaneando
+   sin interrumpir al docente (no si esta escribiendo, escaneando
    o con un formulario abierto). */
 function programarRender(){
   clearTimeout(renderTimer);
@@ -150,7 +177,7 @@ function persist(col, objs){
     const lote = fsdb.batch();
     lista.slice(i,i+400).forEach(o=>
       lote.set(fsdb.collection(col).doc(String(o.id)), JSON.parse(JSON.stringify(o))));
-    lote.commit().catch(()=>toast('Cambio guardado en este equipo; se sincronizará al recuperar conexión.'));
+    lote.commit().catch(()=>toast('Cambio guardado en este equipo; se sincronizara al recuperar conexion.'));
   }
 }
 function persistDel(col, ids){
@@ -169,15 +196,15 @@ function persistPlantel(){
     fsdb.collection('config').doc('plantel').set(JSON.parse(JSON.stringify(DB.plantel))).catch(()=>{});
 }
 /* Sube TODO el contenido de DB a Firestore (siembra inicial o
-   migración de un respaldo local). No borra documentos previos. */
+   migracion de un respaldo local). No borra documentos previos. */
 function subirTodoANube(){
   if(MODO!=='nube') { guardarLocal(); return; }
   persistPlantel();
   COLECCIONES.forEach(col=>persist(col, DB[col]));
-  toast('Datos enviados a la nube. La sincronización puede tardar unos segundos.');
+  toast('Datos enviados a la nube. La sincronizacion puede tardar unos segundos.');
 }
 
-/* ───────── Pantalla de inicio de sesión ───────── */
+/* ───────── Pantalla de inicio de sesion ───────── */
 function mostrarLogin(){ const l=document.getElementById('loginOverlay'); if(l) l.hidden=false; }
 function ocultarLogin(){ const l=document.getElementById('loginOverlay'); if(l) l.hidden=true; }
 
@@ -193,9 +220,9 @@ function prepararLogin(){
       await authFB.signInWithEmailAndPassword(mail, pass);
     }catch(e){
       const cod = e && e.code || '';
-      error(cod.includes('network') ? 'Sin conexión a internet. Intenta de nuevo.'
+      error(cod.includes('network') ? 'Sin conexion a internet. Intenta de nuevo.'
         : cod.includes('too-many') ? 'Demasiados intentos. Espera unos minutos.'
-        : 'Correo o contraseña incorrectos. Las cuentas las crea la dirección del plantel.');
+        : 'Correo o contraseña incorrectos. Las cuentas las crea la direccion del plantel.');
     }
     $i('logEntrar').disabled = false;
   });
@@ -211,11 +238,17 @@ function prepararLogin(){
   });
 }
 
-/* ───────── Cambio de contraseña ───────── */
+/* ───────── Cambio de contraseña ─────────
+   Nota de seguridad: ya NO existe una contraseña temporal fija
+   compartida por todos los docentes. Cada cuenta nueva se crea con
+   una contraseña aleatoria distinta (ver migracion/crear-docente.cjs),
+   asi que no hay nada "adivinable" que comparar aqui — solo se pide
+   que la nueva contraseña tenga al menos 6 caracteres y que las dos
+   capturas coincidan. */
 function modalCambioObligatorio(){
   abrirModal('Bienvenido: crea tu contraseña', `
-    <p class="muted">Por seguridad, en tu primer ingreso debes cambiar la contraseña temporal por una personal. Solo tú la conocerás.</p>
-    <div class="field" style="margin-top:.8rem"><label>Nueva contraseña (mínimo 6 caracteres)</label>
+    <p class="muted">Por seguridad, en tu primer ingreso debes cambiar la contraseña temporal por una personal. Solo tu la conoceras.</p>
+    <div class="field" style="margin-top:.8rem"><label>Nueva contraseña (minimo 6 caracteres)</label>
       <input id="cpNueva" type="password" autocomplete="new-password"></div>
     <div class="field" style="margin-top:.6rem"><label>Repite la nueva contraseña</label>
       <input id="cpRepite" type="password" autocomplete="new-password"></div>
@@ -229,7 +262,7 @@ function modalCambioObligatorio(){
 }
 function modalCambioVoluntario(){
   abrirModal('Cambiar mi contraseña', `
-    <div class="field"><label>Nueva contraseña (mínimo 6 caracteres)</label>
+    <div class="field"><label>Nueva contraseña (minimo 6 caracteres)</label>
       <input id="cpNueva" type="password" autocomplete="new-password"></div>
     <div class="field" style="margin-top:.6rem"><label>Repite la nueva contraseña</label>
       <input id="cpRepite" type="password" autocomplete="new-password"></div>
@@ -247,25 +280,24 @@ async function cambiarPassword(obligatorio){
   const error = m=>{ const e=$i('cpError'); e.textContent=m; e.hidden=false; };
   if(nueva.length<6){ error('La contraseña debe tener al menos 6 caracteres.'); return; }
   if(nueva!==rep){ error('Las dos contraseñas no coinciden.'); return; }
-  if(nueva===PASS_TEMPORAL){ error('Elige una contraseña distinta a la temporal.'); return; }
   $i('cpOk').disabled = true;
   try{
     await usuarioActual.updatePassword(nueva);
     localStorage.setItem('p50_pass_ok_'+usuarioActual.uid, '1');
     document.getElementById('modalClose').style.display='';
     cerrarModal();
-    toast('Contraseña actualizada. Úsala en tus próximos ingresos.');
+    toast('Contraseña actualizada. Usala en tus proximos ingresos.');
   }catch(e){
     const cod = e && e.code || '';
     if(cod.includes('requires-recent-login')){
-      error('Por seguridad, vuelve a iniciar sesión y cambia la contraseña enseguida.');
+      error('Por seguridad, vuelve a iniciar sesion y cambia la contraseña enseguida.');
       setTimeout(()=>authFB.signOut(), 2500);
-    } else error('No se pudo cambiar. Revisa tu conexión e intenta de nuevo.');
+    } else error('No se pudo cambiar. Revisa tu conexion e intenta de nuevo.');
     $i('cpOk').disabled = false;
   }
 }
 
-/* ───────── Indicador de sesión en la barra superior ───────── */
+/* ───────── Indicador de sesion en la barra superior ───────── */
 function pintarSesion(){
   const z = document.getElementById('sesionInfo'); if(!z) return;
   if(MODO==='local'){
@@ -275,11 +307,11 @@ function pintarSesion(){
       ? '<span class="tag tag-qr" title="Acceso total">★ Admin</span>'
       : (PERFIL.docenteId
           ? '<span class="tag tag-info" title="Solo tus materias asignadas">Docente</span>'
-          : '<span class="tag tag-aviso" title="Tu correo no está ligado a ningún docente">Sin vincular</span>');
+          : '<span class="tag tag-aviso" title="Tu correo no esta ligado a ningun docente">Sin vincular</span>');
     z.innerHTML = `${insignia}
-      <span class="sesion-mail" title="Sesión iniciada">${usuarioActual.email}</span>
+      <span class="sesion-mail" title="Sesion iniciada">${usuarioActual.email}</span>
       <button class="btn btn-sm btn-outline" id="btnPass" title="Cambiar mi contraseña">🔑</button>
-      <button class="btn btn-sm btn-outline" id="btnSalir">Cerrar sesión</button>`;
+      <button class="btn btn-sm btn-outline" id="btnSalir">Cerrar sesion</button>`;
     document.getElementById('btnPass').addEventListener('click', modalCambioVoluntario);
     document.getElementById('btnSalir').addEventListener('click', ()=>authFB.signOut());
   } else if(modoConsulta){

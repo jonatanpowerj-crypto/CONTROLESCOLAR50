@@ -6,3 +6,4 @@ dist-react/
 
 *.log
 *.ps1
+migracion/service-account.json
