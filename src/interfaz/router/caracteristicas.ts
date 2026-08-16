@@ -95,7 +95,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     icono: '⚙️',
     modulo: 'configuracion',
     descripcion: 'Configuración del sistema',
-    componente: () => import('../../modulos/configuracion/ConfiguracionPagina').then((mod) => ({ default: mod.ConfiguracionPagina as ComponentType<unknown> })),
+    componente: () => import('../configuracion/ConfiguracionPagina').then((mod) => ({ default: mod.ConfiguracionPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_CONFIGURACION',
   },
 ]
