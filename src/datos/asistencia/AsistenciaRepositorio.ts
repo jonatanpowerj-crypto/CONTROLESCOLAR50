@@ -18,8 +18,21 @@ export class AsistenciaRepositorio extends FirebaseClient<Asistencia> {
     )
   }
 
-  // Guardado en lote: usado por el pase de lista manual, donde el
-  // docente marca a todo el grupo y guarda todo junto al final.
+  // Para reportes: todo un grupo en un rango de fechas. Es probable
+  // que Firestore pida crear un indice compuesto nuevo (grupoId + fecha)
+  // la primera vez que se use - si aparece el error con el link de
+  // "crear indice", es el mismo patron que ya resolvimos antes.
+  async obtenerPorGrupoYRango(grupoId: string, desde: string, hasta: string): Promise<Asistencia[]> {
+    return super.obtenerTodos(
+      query(
+        this.ref,
+        where('grupoId', '==', grupoId),
+        where('fecha', '>=', desde),
+        where('fecha', '<=', hasta)
+      )
+    )
+  }
+
   async guardarLote(registros: AsistenciaCrear[]): Promise<void> {
     const db = obtenerDb()
     const lote = writeBatch(db)
@@ -33,9 +46,6 @@ export class AsistenciaRepositorio extends FirebaseClient<Asistencia> {
     await lote.commit()
   }
 
-  // Guardado individual e inmediato: usado por el escaner QR, donde
-  // cada alumno se registra al instante conforme va llegando, no en
-  // un lote al final.
   async guardarUno(datos: AsistenciaCrear): Promise<Asistencia> {
     const asistencia = crearAsistencia(datos)
     await this.crear(asistencia.id, asistencia)

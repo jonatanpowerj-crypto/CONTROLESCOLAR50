@@ -106,9 +106,7 @@ export const PanelDelDiaPagina = () => {
               <Link to="/credenciales" className="btn btn-primary">🪪 Imprimir credenciales QR</Link>
               <Link to="/calificaciones" className="btn btn-outline">🧮 Capturar calificaciones</Link>
               <Link to="/asistencia" className="btn btn-outline">📋 Pase de lista</Link>
-              <button className="btn btn-outline" disabled title="Disponible en una próxima fase">
-                📈 Exportar reportes
-              </button>
+              <Link to="/reportes" className="btn btn-outline">📈 Exportar reportes</Link>
               <button className="btn btn-outline" disabled title="Disponible en una próxima fase">
                 📊 Ver estadísticas
               </button>

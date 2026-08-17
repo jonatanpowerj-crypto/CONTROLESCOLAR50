@@ -65,6 +65,15 @@ export const CARACTERISTICAS: Caracteristica[] = [
     componente: () => import('../credenciales/CredencialesPagina').then((mod) => ({ default: mod.CredencialesPagina as ComponentType<unknown> })),
   },
   {
+    id: 'reportes',
+    nombre: 'Reportes',
+    ruta: '/reportes',
+    icono: '📈',
+    modulo: 'alumnos',
+    descripcion: 'Exportación de reportes CSV',
+    componente: () => import('../reportes/ReportesPagina').then((mod) => ({ default: mod.ReportesPagina as ComponentType<unknown> })),
+  },
+  {
     id: 'docentes',
     nombre: 'Docentes',
     ruta: '/docentes',
