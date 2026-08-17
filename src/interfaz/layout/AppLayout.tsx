@@ -13,10 +13,12 @@ interface ItemNav {
 }
 
 const ITEMS_NAV: ItemNav[] = [
+  { ruta: '/panel', nombre: 'Panel del día', icono: '🏠' },
   { ruta: '/alumnos', nombre: 'Alumnos', icono: '🎓' },
   { ruta: '/asistencia', nombre: 'Asistencia', icono: '📋' },
   { ruta: '/calificaciones', nombre: 'Calificaciones', icono: '📊' },
-  { ruta: '/docentes', nombre: 'Docentes', icono: '🧑‍🏫', soloAdmin: true },
+  { ruta: '/credenciales', nombre: 'Credenciales QR', icono: '🪪' },
+  { ruta: '/docentes', nombre: 'Docentes', icono: '🧑\u200d🏫', soloAdmin: true },
   { ruta: '/materias', nombre: 'Materias', icono: '📚', soloAdmin: true },
   { ruta: '/grupos', nombre: 'Grupos', icono: '👥', soloAdmin: true },
   { ruta: '/horarios', nombre: 'Horarios', icono: '🗓️', soloAdmin: true },

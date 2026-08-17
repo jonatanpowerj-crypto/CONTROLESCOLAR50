@@ -17,6 +17,15 @@ export interface Caracteristica {
 
 export const CARACTERISTICAS: Caracteristica[] = [
   {
+    id: 'panel',
+    nombre: 'Panel del día',
+    ruta: '/panel',
+    icono: '🏠',
+    modulo: 'alumnos',
+    descripcion: 'Panel principal con resumen del día',
+    componente: () => import('../panel/PanelDelDiaPagina').then((mod) => ({ default: mod.PanelDelDiaPagina as ComponentType<unknown> })),
+  },
+  {
     id: 'alumnos',
     nombre: 'Alumnos',
     ruta: '/alumnos',
@@ -43,9 +52,17 @@ export const CARACTERISTICAS: Caracteristica[] = [
     icono: '📊',
     modulo: 'alumnos',
     descripcion: 'Gestión de calificaciones',
-    //componente: () => import('../../modulos/alumnos/CalificacionesPagina').then((mod) => ({ default: mod.CalificacionesPagina as ComponentType<unknown> })),
     componente: () => import('../calificaciones/CalificacionesPagina').then((mod) => ({ default: mod.CalificacionesPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_CALIFICACIONES',
+  },
+  {
+    id: 'credenciales',
+    nombre: 'Credenciales QR',
+    ruta: '/credenciales',
+    icono: '🪪',
+    modulo: 'alumnos',
+    descripcion: 'Generador e impresión de credenciales QR',
+    componente: () => import('../credenciales/CredencialesPagina').then((mod) => ({ default: mod.CredencialesPagina as ComponentType<unknown> })),
   },
   {
     id: 'docentes',
@@ -64,7 +81,6 @@ export const CARACTERISTICAS: Caracteristica[] = [
     icono: '📚',
     modulo: 'docentes',
     descripcion: 'Catálogo de materias',
-    //componente: () => import('../../modulos/docentes/MateriasPagina').then((mod) => ({ default: mod.MateriasPagina as ComponentType<unknown> })),
     componente: () => import('../materias/MateriasPagina').then((mod) => ({ default: mod.MateriasPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_MATERIAS',
   },
@@ -86,7 +102,7 @@ export const CARACTERISTICAS: Caracteristica[] = [
     modulo: 'docentes',
     descripcion: 'Configuración de horarios',
     componente: () => import('../horarios/HorariosPagina').then((mod) => ({ default: mod.HorariosPagina as ComponentType<unknown> })),
-        flagKey: 'USE_NEW_HORARIOS',
+    flagKey: 'USE_NEW_HORARIOS',
   },
   {
     id: 'configuracion',

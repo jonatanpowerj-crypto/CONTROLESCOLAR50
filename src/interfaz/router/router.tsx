@@ -13,7 +13,6 @@ const Cargando = () => (
   </div>
 )
 
-// Tipo para componente lazy
 type ComponenteLazy = () => Promise<{ default: ComponentType<unknown> }>
 
 const PaginaDinamica = ({ getComponente }: { getComponente: ComponenteLazy }) => {
@@ -27,11 +26,6 @@ const PaginaDinamica = ({ getComponente }: { getComponente: ComponenteLazy }) =>
   )
 }
 
-// Fuerza un remount completo del arbol al cambiar de ruta, usando el
-// pathname como key. Sin esto, React puede reutilizar la instancia
-// montada de RutaProtegida/PaginaDinamica entre rutas hermanas que
-// comparten la misma forma de arbol, dejando visible el contenido
-// de la ruta anterior aunque la URL ya haya cambiado.
 const ContenidoConKey = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation()
   return <div key={location.pathname}>{children}</div>
@@ -47,7 +41,7 @@ export const Router = ({ caracteristicas = CARACTERISTICAS_ACTIVAS }: RouterProp
       <ContenidoConKey>
         <Routes>
           <Route path="/login" element={<LoginPagina />} />
-          <Route path="/" element={<Navigate to="/alumnos" replace />} />
+          <Route path="/" element={<Navigate to="/panel" replace />} />
 
           {caracteristicas.map((carac) => (
             <Route

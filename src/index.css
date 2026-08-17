@@ -407,3 +407,104 @@
   color: var(--texto-tenue);
   font-size: 0.85rem;
 }
+
+/* ---------- Calificaciones ---------- */
+.calificacion-input {
+  width: 70px;
+  text-align: center;
+  padding: 0.4rem 0.3rem;
+}
+/* ---------- Panel del dia ---------- */
+.panel-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+.stat-card {
+  background: var(--azul-marino-claro);
+  border-radius: var(--radio);
+  padding: 1.1rem 1rem;
+  text-align: center;
+  box-shadow: var(--sombra);
+}
+.stat-valor {
+  font-size: 2rem;
+  font-weight: 800;
+  color: var(--texto);
+}
+.stat-etiqueta {
+  font-size: 0.78rem;
+  color: var(--texto-tenue);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-top: 0.2rem;
+}
+
+.panel-columnas {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.25rem;
+}
+
+/* ---------- Credenciales QR ---------- */
+.credenciales-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 1rem;
+}
+.credencial-tarjeta {
+  background: #fff;
+  color: #1a1a1a;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--sombra);
+  border: 2px solid var(--dorado);
+}
+.credencial-franja {
+  background: var(--azul-marino);
+  color: #fff;
+  padding: 0.5rem 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+}
+.credencial-cuerpo {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 1rem;
+}
+.credencial-nombre {
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+.credencial-matricula {
+  font-size: 0.8rem;
+  color: #555;
+  margin-top: 0.2rem;
+}
+
+/* ---------- Impresion: solo credenciales, sin sidebar/header ---------- */
+@media print {
+  .no-imprimir {
+    display: none !important;
+  }
+  .app-sidebar,
+  .app-header {
+    display: none !important;
+  }
+  .app-content {
+    padding: 0 !important;
+  }
+  body {
+    background: #fff !important;
+  }
+  .credenciales-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .credencial-tarjeta {
+    break-inside: avoid;
+  }
+}
