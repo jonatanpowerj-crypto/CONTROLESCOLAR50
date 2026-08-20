@@ -1,7 +1,8 @@
 // Repositorio de Alumnos - Capa de Datos
 
 import { FirebaseClient } from '../firebase/firebaseClient'
-import { query, where, orderBy } from 'firebase/firestore'
+import { query, where, orderBy, writeBatch, doc } from 'firebase/firestore'
+import { obtenerDb } from '../firebase/firebaseConfig'
 import { Alumno, AlumnoCrear, AlumnoActualizar } from '../../dominio/alumnos/Alumno'
 
 const COLECCION = 'alumnos'
@@ -36,6 +37,30 @@ export class AlumnoRepositorio extends FirebaseClient<Alumno> {
       editadoEn: ahora,
     }
     return super.crear(id, alumno)
+  }
+
+  // Importacion masiva (Excel/CSV): crea varios alumnos de un jalon
+  // usando un batch write, en vez de una escritura por alumno.
+  async crearLote(listaDatos: { datos: AlumnoCrear; id: string }[]): Promise<void> {
+    const db = obtenerDb()
+    const ahora = new Date().toISOString()
+
+    for (let i = 0; i < listaDatos.length; i += 400) {
+      const lote = writeBatch(db)
+      listaDatos.slice(i, i + 400).forEach(({ datos, id }) => {
+        const alumno: Alumno = {
+          id,
+          ...datos,
+          tutor: datos.tutor || '',
+          telTutor: datos.telTutor || '',
+          email: datos.email || '',
+          creadoEn: ahora,
+          editadoEn: ahora,
+        }
+        lote.set(doc(db, COLECCION, id), alumno)
+      })
+      await lote.commit()
+    }
   }
 
   async actualizar(id: string, datos: AlumnoActualizar): Promise<void> {

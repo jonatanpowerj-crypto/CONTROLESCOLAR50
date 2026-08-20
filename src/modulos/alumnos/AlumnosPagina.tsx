@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useAlumnos } from '../../aplicacion/alumnos/useAlumnos'
+import { useEstadisticasAlumnos } from '../../aplicacion/alumnos/useEstadisticasAlumnos'
 import { TablaAlumnos } from '../../interfaz/alumnos/TablaAlumnos'
 import { FormularioAlumno } from '../../interfaz/alumnos/FormularioAlumno'
 import { Alumno, AlumnoCrear } from '../../dominio/alumnos/Alumno'
 
 export const AlumnosPagina = () => {
   const { alumnos, cargando, error, crear, actualizar, eliminar } = useAlumnos()
+  const { estadisticas } = useEstadisticasAlumnos()
   const [mostrarFormulario, setMostrarFormulario] = useState(false)
   const [alumnoEditando, setAlumnoEditando] = useState<Alumno | null>(null)
   const [filtro, setFiltro] = useState('')
@@ -90,6 +92,7 @@ export const AlumnosPagina = () => {
       ) : (
         <TablaAlumnos
           alumnos={alumnosFiltrados}
+          estadisticas={estadisticas}
           onEditar={handleEditar}
           onEliminar={handleEliminar}
         />

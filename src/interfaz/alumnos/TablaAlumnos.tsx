@@ -18,6 +18,24 @@ const ESTADO_COLORES = {
   critico: '#ef4444',
 }
 
+const soloDigitos = (telefono: string): string => telefono.replace(/\D/g, '')
+
+const armarLinkWhatsApp = (alumno: Alumno, stats?: EstadisticaAlumno): string | null => {
+  if (!alumno.telTutor) return null
+  const numero = soloDigitos(alumno.telTutor)
+  if (numero.length < 10) return null
+
+  const porcentaje = stats?.porcentajeAsistencia
+  const mensaje =
+    porcentaje !== undefined
+      ? `Hola, le escribimos de la Preparatoria No. 50 (SIGE) para informarle que ${nombreCompleto(alumno)} tiene ${porcentaje}% de asistencia registrada hasta el momento. Quedamos atentos a cualquier duda.`
+      : `Hola, le escribimos de la Preparatoria No. 50 (SIGE) respecto al alumno(a) ${nombreCompleto(alumno)}.`
+
+  // Numero mexicano: anteponer 52 si viene con 10 digitos locales
+  const numeroConLada = numero.length === 10 ? `52${numero}` : numero
+  return `https://wa.me/${numeroConLada}?text=${encodeURIComponent(mensaje)}`
+}
+
 export const TablaAlumnos = ({
   alumnos,
   estadisticas,
@@ -46,12 +64,14 @@ export const TablaAlumnos = ({
             <th>Promedio</th>
             <th>Asistencia</th>
             <th>Estado</th>
+            <th>Avisar</th>
             <th>Acciones</th>
           </tr>
         </thead>
         <tbody>
           {alumnos.map((alumno) => {
             const stats = estadisticas?.get(alumno.id)
+            const linkWhatsApp = armarLinkWhatsApp(alumno, stats)
             return (
               <tr key={alumno.id}>
                 <td className="mono">{alumno.matricula}</td>
@@ -66,19 +86,36 @@ export const TablaAlumnos = ({
                 <td>{alumno.tutor || '-'}</td>
                 <td>{alumno.telTutor || '-'}</td>
                 <td className="numero">
-                  {stats ? stats.promedioGeneral.toFixed(1) : '-'}
+                  {stats && stats.totalCalificaciones > 0 ? stats.promedioGeneral.toFixed(1) : '-'}
                 </td>
                 <td className="numero">
-                  {stats ? `${stats.porcentajeAsistencia}%` : '-'}
+                  {stats && stats.totalAsistencias > 0 ? `${stats.porcentajeAsistencia}%` : 'Sin registros'}
                 </td>
                 <td>
-                  {stats && (
+                  {stats && (stats.totalAsistencias > 0 || stats.totalCalificaciones > 0) && (
                     <span
                       className="tag"
                       style={{ backgroundColor: ESTADO_COLORES[stats.estado] }}
                     >
                       {stats.estado}
                     </span>
+                  )}
+                </td>
+                <td className="acciones">
+                  {linkWhatsApp ? (
+                    <a
+                      href={linkWhatsApp}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="btn btn-sm btn-outline"
+                      title="Avisar al tutor por WhatsApp"
+                    >
+                      📲
+                    </a>
+                  ) : (
+                    <button className="btn btn-sm btn-outline" disabled title="Sin teléfono de tutor registrado">
+                      📲
+                    </button>
                   )}
                 </td>
                 <td className="acciones">

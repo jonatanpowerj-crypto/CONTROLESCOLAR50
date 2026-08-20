@@ -24,6 +24,7 @@ const ITEMS_NAV: ItemNav[] = [
   { ruta: '/grupos', nombre: 'Grupos', icono: '👥', soloAdmin: true },
   { ruta: '/horarios', nombre: 'Horarios', icono: '🗓️', soloAdmin: true },
   { ruta: '/configuracion', nombre: 'Configuración', icono: '⚙️', soloAdmin: true },
+  { ruta: '/importar-alumnos', nombre: 'Importar Alumnos', icono: '📥', soloAdmin: true },
 ]
 
 interface AppLayoutProps {

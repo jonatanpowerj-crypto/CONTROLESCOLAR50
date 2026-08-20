@@ -36,6 +36,15 @@ export const CARACTERISTICAS: Caracteristica[] = [
     flagKey: 'USE_NEW_ALUMNOS',
   },
   {
+    id: 'importar-alumnos',
+    nombre: 'Importar Alumnos',
+    ruta: '/importar-alumnos',
+    icono: '📥',
+    modulo: 'alumnos',
+    descripcion: 'Alta masiva de alumnos desde Excel/CSV',
+    componente: () => import('../alumnos/ImportarAlumnosPagina').then((mod) => ({ default: mod.ImportarAlumnosPagina as ComponentType<unknown> })),
+  },
+  {
     id: 'asistencia',
     nombre: 'Asistencia',
     ruta: '/asistencia',
