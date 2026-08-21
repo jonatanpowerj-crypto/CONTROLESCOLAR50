@@ -43,6 +43,29 @@ interface ContextoConflicto {
   nombreGrupoPorId: Record<string, string>
 }
 
+// Agrupa los horarios de un grupo por franja horaria (hi-hf) para
+// renderizar la rejilla semanal: filas = franjas unicas ordenadas,
+// columnas = dias. Funciona bien cuando las clases del plantel siguen
+// bloques de horario consistentes entre dias (caso normal de un plantel).
+export interface FranjaRejilla {
+  etiqueta: string // "07:00 – 08:40"
+  porDia: Partial<Record<Dia, Horario>>
+}
+
+export const construirRejillaSemanal = (horariosDelGrupo: Horario[]): FranjaRejilla[] => {
+  const franjasMap = new Map<string, FranjaRejilla>()
+
+  horariosDelGrupo.forEach((h) => {
+    const clave = `${h.hi}-${h.hf}`
+    if (!franjasMap.has(clave)) {
+      franjasMap.set(clave, { etiqueta: `${h.hi} – ${h.hf}`, porDia: {} })
+    }
+    franjasMap.get(clave)!.porDia[h.dia] = h
+  })
+
+  return Array.from(franjasMap.values()).sort((a, b) => a.etiqueta.localeCompare(b.etiqueta))
+}
+
 export const detectarConflictos = (
   candidato: HorarioCrear,
   existentes: Horario[],

@@ -508,3 +508,54 @@
     break-inside: avoid;
   }
 }
+/* ---------- Rejilla semanal de Horarios ---------- */
+.rejilla-semanal th,
+.rejilla-semanal td {
+  text-align: center;
+  vertical-align: middle;
+  min-width: 130px;
+}
+.rejilla-semanal td:first-child {
+  min-width: 90px;
+  font-size: 0.8rem;
+  color: var(--texto-tenue);
+}
+.rejilla-celda {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-size: 0.82rem;
+  line-height: 1.3;
+}
+.rejilla-celda span {
+  color: var(--texto-tenue);
+  font-size: 0.75rem;
+}
+
+/* Se oculta en pantalla, solo aparece al imprimir (encabezado del PDF) */
+.solo-imprimir {
+  display: none;
+}
+
+@media print {
+  .solo-imprimir {
+    display: block;
+    color: #000;
+  }
+  .rejilla-semanal {
+    color: #000;
+    border: 1px solid #999;
+  }
+  .rejilla-semanal th,
+  .rejilla-semanal td {
+    border: 1px solid #ccc;
+    color: #000;
+  }
+  .rejilla-celda span {
+    color: #333;
+  }
+  .table-wrap {
+    background: #fff !important;
+    box-shadow: none !important;
+  }
+}
