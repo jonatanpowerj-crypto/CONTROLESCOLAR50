@@ -12,6 +12,7 @@ export interface EstadoGrupos {
   crear: (datos: GrupoCrear) => Promise<boolean>
   actualizar: (id: string, datos: GrupoActualizar) => Promise<boolean>
   eliminar: (id: string) => Promise<boolean>
+  promover: (nuevoGrupo: Grupo, idsAlumnos: string[]) => Promise<boolean>
 }
 
 const generarId = (): string =>
@@ -85,5 +86,20 @@ export const useGrupos = (): EstadoGrupos => {
     [cargar]
   )
 
-  return { grupos, cargando, error, recargar: cargar, crear, actualizar, eliminar }
+  const promover = useCallback(
+    async (nuevoGrupo: Grupo, idsAlumnos: string[]): Promise<boolean> => {
+      try {
+        await grupoRepositorio.promoverGrupo(nuevoGrupo, idsAlumnos)
+        await cargar()
+        return true
+      } catch (err) {
+        console.error('useGrupos: error al promover', err)
+        setError('No se pudo promover el grupo.')
+        return false
+      }
+    },
+    [cargar]
+  )
+
+  return { grupos, cargando, error, recargar: cargar, crear, actualizar, eliminar, promover }
 }
