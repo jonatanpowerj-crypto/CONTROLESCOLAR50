@@ -83,6 +83,15 @@ export const CARACTERISTICAS: Caracteristica[] = [
     componente: () => import('../reportes/ReportesPagina').then((mod) => ({ default: mod.ReportesPagina as ComponentType<unknown> })),
   },
   {
+    id: 'estadisticas',
+    nombre: 'Estadísticas',
+    ruta: '/estadisticas',
+    icono: '📊',
+    modulo: 'alumnos',
+    descripcion: 'Gráficas de asistencia y aprobación',
+    componente: () => import('../estadisticas/EstadisticasPagina').then((mod) => ({ default: mod.EstadisticasPagina as ComponentType<unknown> })),
+  },
+  {
     id: 'docentes',
     nombre: 'Docentes',
     ruta: '/docentes',
@@ -121,6 +130,15 @@ export const CARACTERISTICAS: Caracteristica[] = [
     descripcion: 'Configuración de horarios',
     componente: () => import('../horarios/HorariosPagina').then((mod) => ({ default: mod.HorariosPagina as ComponentType<unknown> })),
     flagKey: 'USE_NEW_HORARIOS',
+  },
+  {
+    id: 'vista-plantel',
+    nombre: 'Vista General del Plantel',
+    ruta: '/vista-plantel',
+    icono: '🏫',
+    modulo: 'docentes',
+    descripcion: 'Horario de todos los grupos a la vez',
+    componente: () => import('../plantel/VistaPlantelPagina').then((mod) => ({ default: mod.VistaPlantelPagina as ComponentType<unknown> })),
   },
   {
     id: 'configuracion',

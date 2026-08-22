@@ -23,6 +23,7 @@ const ITEMS_NAV: ItemNav[] = [
   { ruta: '/materias', nombre: 'Materias', icono: '📚', soloAdmin: true },
   { ruta: '/grupos', nombre: 'Grupos', icono: '👥', soloAdmin: true },
   { ruta: '/horarios', nombre: 'Horarios', icono: '🗓️', soloAdmin: true },
+  { ruta: '/vista-plantel', nombre: 'Vista del Plantel', icono: '🏫', soloAdmin: true },
   { ruta: '/configuracion', nombre: 'Configuración', icono: '⚙️', soloAdmin: true },
   { ruta: '/importar-alumnos', nombre: 'Importar Alumnos', icono: '📥', soloAdmin: true },
 ]

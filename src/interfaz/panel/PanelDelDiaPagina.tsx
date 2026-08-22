@@ -107,9 +107,7 @@ export const PanelDelDiaPagina = () => {
               <Link to="/calificaciones" className="btn btn-outline">🧮 Capturar calificaciones</Link>
               <Link to="/asistencia" className="btn btn-outline">📋 Pase de lista</Link>
               <Link to="/reportes" className="btn btn-outline">📈 Exportar reportes</Link>
-              <button className="btn btn-outline" disabled title="Disponible en una próxima fase">
-                📊 Ver estadísticas
-              </button>
+              <Link to="/estadisticas" className="btn btn-outline">📊 Ver estadísticas</Link>
             </div>
           </div>
         </>
