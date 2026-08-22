@@ -1,6 +1,6 @@
 // src/aplicacion/auth/LoginPagina.tsx
 import { FormEvent, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { signInWithEmailAndPassword } from 'firebase/auth'
 import { obtenerAuth } from '../../datos/firebase/firebaseConfig'
 import { useAuth } from './useAuth'
@@ -28,10 +28,10 @@ export const LoginPagina = () => {
   const [cargando, setCargando] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  // Si ya hay sesion activa (login exitoso, o el usuario ya estaba logueado
-  // de antes), sacarlo de /login y mandarlo a la app.
+  // Si ya hay sesion activa (login exitoso, o el usuario ya estaba
+  // logueado de antes), sacarlo de /login y mandarlo a la app.
   if (!cargandoAuth && usuario) {
-    return <Navigate to="/alumnos" replace />
+    return <Navigate to="/panel" replace />
   }
 
   const manejarSubmit = async (evento: FormEvent) => {
@@ -95,12 +95,17 @@ export const LoginPagina = () => {
             {cargando ? 'Ingresando...' : 'Iniciar sesión'}
           </button>
         </form>
+
         <div style={{ textAlign: 'center', marginTop: '1rem' }}>
-  <span style={{ color: 'var(--texto-tenue)', fontSize: '0.85rem' }}>— o —</span>
-</div>
-<a href="/portal" className="btn btn-outline" style={{ marginTop: '0.75rem', display: 'block', textAlign: 'center' }}>
-  🔎 Consultar como padre o alumno
-</a>
+          <span style={{ color: 'var(--texto-tenue)', fontSize: '0.85rem' }}>— o —</span>
+        </div>
+        <Link
+          to="/portal"
+          className="btn btn-outline"
+          style={{ marginTop: '0.75rem', display: 'block', textAlign: 'center' }}
+        >
+          🔎 Consultar como padre o alumno
+        </Link>
       </div>
     </div>
   )
