@@ -18,10 +18,6 @@ export class AsistenciaRepositorio extends FirebaseClient<Asistencia> {
     )
   }
 
-  // Para reportes: todo un grupo en un rango de fechas. Es probable
-  // que Firestore pida crear un indice compuesto nuevo (grupoId + fecha)
-  // la primera vez que se use - si aparece el error con el link de
-  // "crear indice", es el mismo patron que ya resolvimos antes.
   async obtenerPorGrupoYRango(grupoId: string, desde: string, hasta: string): Promise<Asistencia[]> {
     return super.obtenerTodos(
       query(
@@ -31,6 +27,13 @@ export class AsistenciaRepositorio extends FirebaseClient<Asistencia> {
         where('fecha', '<=', hasta)
       )
     )
+  }
+
+  // Para el portal publico de consulta (padres/alumnos): historial
+  // completo de un alumno, sin importar el grupo. Filtro simple de
+  // un solo campo, no requiere indice compuesto.
+  async obtenerPorAlumno(alumnoId: string): Promise<Asistencia[]> {
+    return super.obtenerTodos(query(this.ref, where('alumnoId', '==', alumnoId)))
   }
 
   async guardarLote(registros: AsistenciaCrear[]): Promise<void> {

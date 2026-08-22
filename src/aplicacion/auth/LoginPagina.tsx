@@ -95,6 +95,12 @@ export const LoginPagina = () => {
             {cargando ? 'Ingresando...' : 'Iniciar sesión'}
           </button>
         </form>
+        <div style={{ textAlign: 'center', marginTop: '1rem' }}>
+  <span style={{ color: 'var(--texto-tenue)', fontSize: '0.85rem' }}>— o —</span>
+</div>
+<a href="/portal" className="btn btn-outline" style={{ marginTop: '0.75rem', display: 'block', textAlign: 'center' }}>
+  🔎 Consultar como padre o alumno
+</a>
       </div>
     </div>
   )
