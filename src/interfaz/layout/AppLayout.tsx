@@ -16,6 +16,7 @@ const ITEMS_NAV: ItemNav[] = [
   { ruta: '/panel', nombre: 'Panel del día', icono: '🏠' },
   { ruta: '/alumnos', nombre: 'Alumnos', icono: '🎓' },
   { ruta: '/asistencia', nombre: 'Asistencia', icono: '📋' },
+  { ruta: '/bitacora', nombre: 'Bitácora', icono: '📓' },
   { ruta: '/calificaciones', nombre: 'Calificaciones', icono: '📊' },
   { ruta: '/credenciales', nombre: 'Credenciales QR', icono: '🪪' },
   { ruta: '/reportes', nombre: 'Reportes', icono: '📈' },

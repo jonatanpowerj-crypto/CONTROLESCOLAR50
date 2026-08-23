@@ -141,6 +141,15 @@ export const CARACTERISTICAS: Caracteristica[] = [
     componente: () => import('../plantel/VistaPlantelPagina').then((mod) => ({ default: mod.VistaPlantelPagina as ComponentType<unknown> })),
   },
   {
+    id: 'bitacora',
+    nombre: 'Bitácora',
+    ruta: '/bitacora',
+    icono: '📓',
+    modulo: 'alumnos',
+    descripcion: 'Registro de clase alineado a la NEM',
+    componente: () => import('../bitacora/BitacoraPagina').then((mod) => ({ default: mod.BitacoraPagina as ComponentType<unknown> })),
+  },
+  {
     id: 'configuracion',
     nombre: 'Configuración',
     ruta: '/configuracion',
