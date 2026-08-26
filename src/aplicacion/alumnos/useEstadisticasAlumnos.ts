@@ -2,11 +2,14 @@
 //
 // IMPORTANTE: este hook NO usa dominio/alumnos/valueObjects.ts (ese
 // archivo define un esquema incompatible con los datos reales que
-// guardan los modulos de Asistencia y Calificaciones - estados de una
-// letra 'P'/'R'/'J'/'F' en vez de 'presente'/'ausente'/'retardo', y
-// exige materiaId/hora que Asistencia real no usa). Este hook calcula
-// las estadisticas usando los modelos reales (dominio/asistencia y
-// dominio/calificaciones) para que los numeros sean correctos.
+// guardan los modulos de Asistencia y Calificaciones). Este hook
+// calcula las estadisticas usando los modelos reales.
+//
+// NOTA (corregido): calcularPromedio() de dominio/calificaciones ya
+// devuelve el promedio en escala 0-10, NO en 0-100. La version
+// anterior de este archivo dividia el resultado entre 10 de mas,
+// mostrando promedios 10 veces menores a los reales (bug detectado
+// por las pruebas automatizadas de Calificacion.test.ts).
 
 import { useEffect, useState } from 'react'
 import { asistenciaRepositorio } from '../../datos/asistencia/AsistenciaRepositorio'
@@ -72,15 +75,14 @@ export const useEstadisticasAlumnos = () => {
             porMateria.forEach((califsMateria, materiaId) => {
               totalCalificaciones += califsMateria.length
               const rubros = rubrosPorMateria.get(materiaId) ?? []
+              // calcularPromedio ya devuelve escala 0-10 - no dividir entre 10.
               const promedio = calcularPromedio(califsMateria, rubros)
               if (promedio !== null) promediosMateria.push(promedio)
             })
             if (promediosMateria.length > 0) {
               promedioGeneral = Number(
-                (promediosMateria.reduce((a, b) => a + b, 0) / promediosMateria.length / 10).toFixed(1)
+                (promediosMateria.reduce((a, b) => a + b, 0) / promediosMateria.length).toFixed(1)
               )
-              // calcularPromedio devuelve escala 0-100; se normaliza a 0-10
-              // para que coincida con la escala que usa la tabla (Promedio).
             }
           }
 

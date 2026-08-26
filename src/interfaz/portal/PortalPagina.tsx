@@ -2,6 +2,11 @@
 // IMPORTANTE: esta pagina es PUBLICA (no requiere sesion). Se apoya
 // en que las reglas de Firestore ya permiten lectura publica de
 // alumnos, asistencias, calificaciones, materias y horarios.
+//
+// NOTA (corregido): calcularPromedio() ya devuelve escala 0-10, NO
+// 0-100. La version anterior dividia entre 10 de mas, mostrando el
+// promedio por materia 10 veces menor al real (bug detectado por
+// las pruebas automatizadas de Calificacion.test.ts).
 
 import { useState } from 'react'
 import { QRCodeSVG } from 'qrcode.react'
@@ -92,12 +97,13 @@ export const PortalPagina = () => {
         materiasGrupo.map(async (materia) => {
           const califsMateria = await calificacionRepositorio.obtenerPorMateria(materia.id)
           const califsAlumno = califsMateria.filter((c) => c.alumnoId === alumno.id)
+          // calcularPromedio ya devuelve escala 0-10 - no dividir entre 10.
           const promedio = calcularPromedio(califsAlumno, materia.rubros)
           const docente = docentes.find((d) => d.id === materia.docenteId)
           return {
             materia,
             docenteNombre: docente?.nombre ?? '',
-            promedio: promedio !== null ? promedio / 10 : null,
+            promedio,
           }
         })
       )

@@ -1,10 +1,11 @@
 // Componente Escaner QR - Interfaz
-// Envuelve la libreria html5-qrcode con el mismo comportamiento que
-// tenia el legacy (js/app.js): camara trasera, debounce de 2.5s para
-// evitar lecturas dobles del mismo codigo.
+// La libreria 'html5-qrcode' (pesa ~340 KB) se carga de forma diferida
+// con import() dinamico dentro del efecto, solo cuando el modo QR se
+// activa. Un docente que use solo el pase de lista manual nunca
+// descarga esos 340 KB.
 
 import { useEffect, useRef } from 'react'
-import { Html5Qrcode } from 'html5-qrcode'
+import type { Html5Qrcode as Html5QrcodeType } from 'html5-qrcode'
 
 interface EscanerQRProps {
   activo: boolean
@@ -14,7 +15,6 @@ interface EscanerQRProps {
 const CONTENEDOR_ID = 'qr-reader-asistencia'
 
 export const EscanerQR = ({ activo, onLectura }: EscanerQRProps) => {
-  const lectorRef = useRef<Html5Qrcode | null>(null)
   const ultimoRef = useRef<{ texto: string; t: number }>({ texto: '', t: 0 })
   const onLecturaRef = useRef(onLectura)
   onLecturaRef.current = onLectura
@@ -22,45 +22,59 @@ export const EscanerQR = ({ activo, onLectura }: EscanerQRProps) => {
   useEffect(() => {
     if (!activo) return
 
-    const lector = new Html5Qrcode(CONTENEDOR_ID)
-    lectorRef.current = lector
-    //let detenido = false
+    let cancelado = false
+    let lector: Html5QrcodeType | null = null
 
-    lector
-      .start(
-        { facingMode: 'environment' },
-        { fps: 10, qrbox: { width: 220, height: 220 } },
-        (textoDecodificado) => {
-          const ahora = Date.now()
-          if (
-            textoDecodificado === ultimoRef.current.texto &&
-            ahora - ultimoRef.current.t < 2500
-          ) {
-            return // evita procesar el mismo codigo dos veces seguidas
+    const iniciar = async () => {
+      const { Html5Qrcode } = await import('html5-qrcode') // carga diferida
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      if (cancelado) return
+
+      lector = new Html5Qrcode(CONTENEDOR_ID)
+
+      try {
+        await lector.start(
+          { facingMode: 'environment' },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          (textoDecodificado) => {
+            const ahora = Date.now()
+            if (
+              textoDecodificado === ultimoRef.current.texto &&
+              ahora - ultimoRef.current.t < 2500
+            ) {
+              return
+            }
+            ultimoRef.current = { texto: textoDecodificado, t: ahora }
+            onLecturaRef.current(textoDecodificado)
+          },
+          () => {
+            // Frames sin QR detectado - normal, no es un error real.
           }
-          ultimoRef.current = { texto: textoDecodificado, t: ahora }
-          onLecturaRef.current(textoDecodificado)
-        },
-        () => {
-          // Frames sin QR detectado - es normal, no es un error real.
+        )
+      } catch (err) {
+        if (!cancelado) {
+          console.error('EscanerQR: no se pudo iniciar la camara', err)
         }
-      )
-      .catch((err) => {
-        console.error('EscanerQR: no se pudo iniciar la camara', err)
-      })
+      }
+    }
+
+    iniciar()
 
     return () => {
-      //detenido = true
-      lector
-        .stop()
-        .catch(() => {})
-        .finally(() => {
-          try {
-            lector.clear()
-          } catch {
-            // noop
-          }
-        })
+      cancelado = true
+      if (lector) {
+        lector
+          .stop()
+          .catch(() => {})
+          .finally(() => {
+            try {
+              lector?.clear()
+            } catch {
+              // noop
+            }
+          })
+      }
     }
   }, [activo])
 

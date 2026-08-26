@@ -1,7 +1,11 @@
 // Hook de Importacion de Alumnos - Capa de Aplicacion
+// La libreria 'xlsx' (pesa ~430 KB) se carga de forma diferida con
+// import() dinamico dentro de las funciones que la necesitan, en vez
+// de importarla al inicio del archivo. Asi, un docente que entra a
+// esta pantalla pero no llega a subir un archivo no descarga esos
+// 430 KB de mas.
 
 import { useCallback, useState } from 'react'
-import * as XLSX from 'xlsx'
 import { alumnoRepositorio } from '../../datos/alumnos/AlumnoRepositorio'
 import {
   CandidatoImportacion,
@@ -34,6 +38,7 @@ export const useImportarAlumnos = (): EstadoImportarAlumnos => {
     setCandidatos([])
 
     try {
+      const XLSX = await import('xlsx') // carga diferida, solo aqui
       const buffer = await archivo.arrayBuffer()
       const libro = XLSX.read(buffer, { type: 'array' })
       const hoja = libro.Sheets[libro.SheetNames[0]]
@@ -92,8 +97,10 @@ export const useImportarAlumnos = (): EstadoImportarAlumnos => {
   return { candidatos, procesandoArchivo, importando, error, procesarArchivo, importarValidos, limpiar }
 }
 
-// Genera y descarga una plantilla de ejemplo en formato .xlsx
-export const descargarPlantillaExcel = (): void => {
+// Genera y descarga una plantilla de ejemplo en formato .xlsx.
+// Tambien carga 'xlsx' de forma diferida, solo cuando se llama.
+export const descargarPlantillaExcel = async (): Promise<void> => {
+  const XLSX = await import('xlsx')
   const datos = [
     ['matricula', 'nombre', 'apellidos', 'tutor', 'telefono_tutor', 'correo'],
     ['A1050', 'Lucía', 'Pérez Gómez', 'Marta Gómez', '744-000-0000', 'lucia@example.com'],

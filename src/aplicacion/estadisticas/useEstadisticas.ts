@@ -1,4 +1,9 @@
 // Hook de Estadisticas - Capa de Aplicacion
+//
+// NOTA (corregido): calcularPromedio() ya devuelve escala 0-10, NO
+// 0-100. La version anterior dividia entre 10 de mas, mostrando
+// promedios y % de aprobacion 10 veces menores a los reales (bug
+// detectado por las pruebas automatizadas).
 
 import { useEffect, useState } from 'react'
 import { alumnoRepositorio } from '../../datos/alumnos/AlumnoRepositorio'
@@ -17,9 +22,9 @@ export interface EstadoEstadisticas {
   cargando: boolean
   error: string | null
   totalAlumnos: number
-  asistenciaPeriodo: number | null // porcentaje 0-100
-  aprobacion: number | null // porcentaje 0-100 de alumnos con promedio >= 6
-  promedioGeneral: number | null // 0-10
+  asistenciaPeriodo: number | null
+  aprobacion: number | null
+  promedioGeneral: number | null
   conteoPorEstado: { presente: number; ausente: number; retardo: number }
   tendencia: PuntoTendencia[]
 }
@@ -87,6 +92,7 @@ export const useEstadisticas = (
         )
 
         // promedio por alumno (promedio de sus materias consideradas)
+        // calcularPromedio ya devuelve escala 0-10 - no dividir entre 10.
         const promediosPorAlumno = new Map<string, number[]>()
         materiasAConsiderar.forEach((materia, i) => {
           const califsMateria = calificacionesPorMateria[i].filter((c) => idsAlumnos.has(c.alumnoId))
@@ -99,7 +105,7 @@ export const useEstadisticas = (
             const promedio = calcularPromedio(calfs, materia.rubros)
             if (promedio !== null) {
               if (!promediosPorAlumno.has(alumnoId)) promediosPorAlumno.set(alumnoId, [])
-              promediosPorAlumno.get(alumnoId)!.push(promedio / 10) // a escala 0-10
+              promediosPorAlumno.get(alumnoId)!.push(promedio)
             }
           })
         })
