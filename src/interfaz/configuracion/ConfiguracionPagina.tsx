@@ -18,12 +18,12 @@ const ETIQUETAS_RESUMEN: Record<string, string> = {
 export const ConfiguracionPagina = () => {
   const { rol } = useAuth()
   const esAdmin = rol === 'admin'
-  const { plantel, resumen, cargando, guardando, error, guardarPlantel, descargarRespaldo } =
+  const { plantel, resumen, cargando, guardando, vaciando, error, guardarPlantel, descargarRespaldo, vaciarSistema } =
     useConfiguracion()
 
   const [form, setForm] = useState<ConfigPlantel>(plantel)
   const [mensajeExito, setMensajeExito] = useState<string | null>(null)
-  //const [confirmacionBorrado, setConfirmacionBorrado] = useState('')
+  const [mensajeVaciado, setMensajeVaciado] = useState<string | null>(null)
 
   useEffect(() => {
     setForm(plantel)
@@ -36,6 +36,26 @@ export const ConfiguracionPagina = () => {
     if (ok) {
       setMensajeExito('Configuración guardada correctamente.')
       setTimeout(() => setMensajeExito(null), 3000)
+    }
+  }
+
+  const manejarVaciar = async () => {
+    setMensajeVaciado(null)
+    const confirmacion = window.prompt(
+      'Esto borrará TODOS los alumnos, docentes, materias, grupos, horarios, ' +
+        'asistencias y calificaciones. NO se puede deshacer.\n\n' +
+        'Descarga un respaldo antes de continuar si no lo has hecho.\n\n' +
+        'Para confirmar, escribe la palabra: BORRAR'
+    )
+    if (confirmacion === null) return
+    if (confirmacion.trim().toUpperCase() !== 'BORRAR') {
+      window.alert('Operación cancelada: no escribiste BORRAR.')
+      return
+    }
+
+    const total = await vaciarSistema()
+    if (total !== null) {
+      setMensajeVaciado(`Sistema vaciado: se eliminaron ${total} documento(s).`)
     }
   }
 
@@ -174,10 +194,29 @@ export const ConfiguracionPagina = () => {
           <div className="table-wrap" style={{ padding: '1.25rem', border: '1px solid rgba(239,68,68,0.4)' }}>
             <h3 style={{ marginBottom: '0.5rem', fontSize: '1rem', color: '#fca5a5' }}>⚠️ Zona de peligro</h3>
             <p className="vacio-texto" style={{ marginBottom: '1rem' }}>
-              Esto NO está implementado desde esta pantalla por seguridad. Para vaciar el sistema
-              por completo, usa el sistema legacy (Reportes → Datos del sistema), que exige escribir
-              la palabra "BORRAR" para confirmar. Descarga un respaldo antes de hacerlo.
+              Borra permanentemente todos los alumnos, docentes, materias, grupos, horarios,
+              asistencias y calificaciones. Las cuentas de acceso (usuarios) y la configuración
+              del plantel NO se borran. <strong>Descarga un respaldo antes de continuar.</strong>
             </p>
+
+            {mensajeVaciado && (
+              <p
+                className="login-error"
+                style={{ marginBottom: '1rem', background: 'rgba(34,197,94,0.15)', color: '#86efac' }}
+              >
+                {mensajeVaciado}
+              </p>
+            )}
+
+            <button
+              type="button"
+              className="btn btn-outline"
+              style={{ borderColor: '#ef4444', color: '#fca5a5' }}
+              onClick={manejarVaciar}
+              disabled={vaciando}
+            >
+              {vaciando ? 'Vaciando sistema...' : '🗑️ Vaciar sistema'}
+            </button>
           </div>
         </>
       )}

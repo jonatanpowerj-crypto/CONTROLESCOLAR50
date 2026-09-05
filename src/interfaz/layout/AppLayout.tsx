@@ -21,6 +21,7 @@ const ITEMS_NAV: ItemNav[] = [
   { ruta: '/credenciales', nombre: 'Credenciales QR', icono: '🪪' },
   { ruta: '/reportes', nombre: 'Reportes', icono: '📈' },
   { ruta: '/docentes', nombre: 'Docentes', icono: '🧑\u200d🏫', soloAdmin: true },
+  { ruta: '/solicitudes', nombre: 'Solicitudes en línea', icono: '📥', soloAdmin: true },
   { ruta: '/materias', nombre: 'Materias', icono: '📚', soloAdmin: true },
   { ruta: '/grupos', nombre: 'Grupos', icono: '👥', soloAdmin: true },
   { ruta: '/horarios', nombre: 'Horarios', icono: '🗓️', soloAdmin: true },

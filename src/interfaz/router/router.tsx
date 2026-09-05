@@ -6,6 +6,7 @@ import { ErrorBoundary } from '../components/ErrorBoundary'
 import { RutaProtegida } from '../../aplicacion/auth/RutaProtegida'
 import { LoginPagina } from '../../aplicacion/auth/LoginPagina'
 import { PortalPagina } from '../portal/PortalPagina'
+import { SolicitarRegistroPagina } from '../docentes/SolicitarRegistroPagina'
 
 const Cargando = () => (
   <div className="cargando">
@@ -42,8 +43,9 @@ export const Router = ({ caracteristicas = CARACTERISTICAS_ACTIVAS }: RouterProp
       <ContenidoConKey>
         <Routes>
           <Route path="/login" element={<LoginPagina />} />
-          {/* Ruta publica: sin RutaProtegida, no requiere sesion */}
+          {/* Rutas publicas: sin RutaProtegida, no requieren sesion */}
           <Route path="/portal" element={<PortalPagina />} />
+          <Route path="/solicitud-docente" element={<SolicitarRegistroPagina />} />
           <Route path="/" element={<Navigate to="/panel" replace />} />
 
           {caracteristicas.map((carac) => (

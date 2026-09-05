@@ -1,12 +1,10 @@
 // Repositorio de Configuracion - Capa de Datos
 
-import { doc, getDoc, setDoc, getDocs, collection } from 'firebase/firestore'
+import { doc, getDoc, setDoc, getDocs, collection, writeBatch } from 'firebase/firestore'
 import { obtenerDb } from '../firebase/firebaseConfig'
 import { ConfigPlantel, CONFIG_PLANTEL_DEFECTO, ResumenSistema } from '../../dominio/configuracion/ConfigPlantel'
 
 // Mismo documento que ya usa el legacy: coleccion "config", doc "plantel"
-// (ver js/nube.js: fsdb.collection('config').doc('plantel')). Compartir
-// este documento mantiene sincronizados legacy y React.
 const COLECCION = 'config'
 const DOC_ID = 'plantel'
 
@@ -15,6 +13,18 @@ const COLECCIONES_CONTAR: (keyof ResumenSistema)[] = [
   'docentes',
   'grupos',
   'materias',
+  'horarios',
+  'asistencias',
+  'calificaciones',
+]
+
+// Mismo alcance que el legacy: NO borra usuarios, config, bitacora
+// ni registros_docentes.
+const COLECCIONES_A_VACIAR = [
+  'docentes',
+  'materias',
+  'grupos',
+  'alumnos',
   'horarios',
   'asistencias',
   'calificaciones',
@@ -49,8 +59,6 @@ export class ConfiguracionRepositorio {
     return resumen
   }
 
-  // Descarga un respaldo completo: config del plantel + todas las
-  // colecciones principales, como un solo archivo JSON.
   async generarRespaldo(): Promise<Record<string, unknown>> {
     const db = obtenerDb()
     const plantel = await this.obtenerPlantel()
@@ -64,6 +72,30 @@ export class ConfiguracionRepositorio {
     )
 
     return respaldo
+  }
+
+  // Vacia el sistema: borra TODOS los documentos de las colecciones
+  // operativas (mismo alcance que el legacy). Devuelve cuantos
+  // documentos se borraron en total, para confirmacion visual.
+  async vaciarSistema(): Promise<number> {
+    const db = obtenerDb()
+    let totalBorrados = 0
+
+    for (const nombreColeccion of COLECCIONES_A_VACIAR) {
+      const snap = await getDocs(collection(db, nombreColeccion))
+      const ids = snap.docs.map((d) => d.id)
+
+      for (let i = 0; i < ids.length; i += 400) {
+        const lote = writeBatch(db)
+        ids.slice(i, i + 400).forEach((id) => {
+          lote.delete(doc(db, nombreColeccion, id))
+        })
+        await lote.commit()
+      }
+      totalBorrados += ids.length
+    }
+
+    return totalBorrados
   }
 }
 

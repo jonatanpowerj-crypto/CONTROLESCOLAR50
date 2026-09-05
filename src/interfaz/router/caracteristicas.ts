@@ -102,6 +102,15 @@ export const CARACTERISTICAS: Caracteristica[] = [
     flagKey: 'USE_NEW_DOCENTES',
   },
   {
+    id: 'solicitudes',
+    nombre: 'Solicitudes en línea',
+    ruta: '/solicitudes',
+    icono: '📥',
+    modulo: 'docentes',
+    descripcion: 'Bandeja de auto-registro de docentes',
+    componente: () => import('../docentes/SolicitudesPagina').then((mod) => ({ default: mod.SolicitudesPagina as ComponentType<unknown> })),
+  },
+  {
     id: 'materias',
     nombre: 'Materias',
     ruta: '/materias',
