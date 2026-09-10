@@ -3,9 +3,13 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: './',
+  // Subruta real donde GitHub Pages sirve este proyecto:
+  // https://jonatanpowerj-crypto.github.io/CONTROLESCOLAR50/
+  base: '/CONTROLESCOLAR50/',
   build: {
-    outDir: 'dist-react',
+    // GitHub Pages puede servir directo desde una carpeta "docs/"
+    // dentro de la rama, sin necesidad de una rama aparte.
+    outDir: 'docs',
     emptyOutDir: true,
     rollupOptions: {
       input: 'index-react.html',
